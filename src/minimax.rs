@@ -12,7 +12,6 @@ pub(crate) struct Minimax<T: Mancala> {
     iterative_deepening: bool,
     evaluator: StateEvalFn<T>,
     heuristic: StateEvalFn<T>,
-    current_depth: Cell<usize>,
     start_time: Cell<Option<Instant>>,
 }
 
@@ -62,7 +61,6 @@ impl<T: Mancala> MinimaxBuilder<T> {
             iterative_deepening: self.iterative_deepening,
             evaluator: self.evaluator,
             heuristic: self.heuristic,
-            current_depth: 0.into(),
             start_time: None.into(),
         }
     }
@@ -99,9 +97,6 @@ impl<T: Mancala> Minimax<T> {
     pub(crate) fn iterative_deepening(&self) -> bool {
         self.iterative_deepening
     }
-    pub(crate) fn current_depth(&self) -> usize {
-        self.current_depth.get()
-    }
     pub(crate) fn start_time(&self) -> Option<Instant> {
         self.start_time.get()
     }
@@ -114,14 +109,12 @@ impl<T: Mancala> Minimax<T> {
 
     pub(crate) fn search(&self, state: &T) -> Option<Move> {
         self.start_time.set(Some(Instant::now()));
-        self.current_depth.set(0);
 
         // TODO: Implement iterative deepening.
 
-        let (best_move, _) = self.max_value(state, f32::NEG_INFINITY, f32::INFINITY);
+        let (best_move, _) = self.max_value(state, f32::NEG_INFINITY, f32::INFINITY, 0);
 
         self.start_time.set(None);
-        self.current_depth.set(0);
         best_move
     }
 
@@ -132,7 +125,7 @@ impl<T: Mancala> Minimax<T> {
         }
     }
 
-    fn max_value(&self, state: &T, alpha: f32, beta: f32) -> (Option<Move>, f32) {
+    fn max_value(&self, state: &T, alpha: f32, beta: f32, depth: usize) -> (Option<Move>, f32) {
         assert_ne!(
             self.start_time.get(),
             None,
@@ -145,11 +138,11 @@ impl<T: Mancala> Minimax<T> {
         }
 
         // If we have reached the artificial limit, use the heuristic.
-        if self.max_depth.is_some_and(|d| self.current_depth() >= d) || self.time_exceeded() {
+        if self.max_depth.is_some_and(|d| depth >= d) || self.time_exceeded() {
             return (None, self.call_heuristic(state));
         }
 
-        self.current_depth.set(self.current_depth() + 1);
+        let depth = depth + 1;
         let mut alpha = alpha;
         let mut v = f32::NEG_INFINITY;
         let mut best_move: Option<Move> = None;
@@ -157,9 +150,9 @@ impl<T: Mancala> Minimax<T> {
         for m in state.valid_moves() {
             let new_state = state.make_move(m).unwrap();
             let (_, v2) = if new_state.current_turn() == state.current_turn() {
-                self.max_value(&new_state, alpha, beta)
+                self.max_value(&new_state, alpha, beta, depth)
             } else {
-                self.min_value(&new_state, alpha, beta)
+                self.min_value(&new_state, alpha, beta, depth)
             };
 
             if v2 > v {
@@ -177,7 +170,7 @@ impl<T: Mancala> Minimax<T> {
         (best_move, v)
     }
 
-    fn min_value(&self, state: &T, alpha: f32, beta: f32) -> (Option<Move>, f32) {
+    fn min_value(&self, state: &T, alpha: f32, beta: f32, depth: usize) -> (Option<Move>, f32) {
         assert_ne!(
             self.start_time(),
             None,
@@ -190,11 +183,11 @@ impl<T: Mancala> Minimax<T> {
         }
 
         // If we have reached the artificial limit, use the heuristic.
-        if self.max_depth.is_some_and(|d| self.current_depth() >= d) || self.time_exceeded() {
+        if self.max_depth.is_some_and(|d| depth >= d) || self.time_exceeded() {
             return (None, self.call_heuristic(state));
         }
 
-        self.current_depth.set(self.current_depth() + 1);
+        let depth = depth + 1;
         let mut beta = beta;
         let mut v = f32::INFINITY;
         let mut best_move: Option<Move> = None;
@@ -202,9 +195,9 @@ impl<T: Mancala> Minimax<T> {
         for m in state.valid_moves() {
             let new_state = state.make_move(m).unwrap();
             let (_, v2) = if new_state.current_turn() == state.current_turn() {
-                self.min_value(&new_state, alpha, beta)
+                self.min_value(&new_state, alpha, beta, depth)
             } else {
-                self.max_value(&new_state, alpha, beta)
+                self.max_value(&new_state, alpha, beta, depth)
             };
 
             if v2 < v {

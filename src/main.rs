@@ -10,7 +10,7 @@ fn main() {
     println!("{}", s);
 
     let minimax = MinimaxBuilder::new()
-        .max_depth(Some(12000000))
+        .max_depth(Some(18))
         //.max_time(Duration::from_secs(10))
         .build();
     let best_move = minimax.search(&s);

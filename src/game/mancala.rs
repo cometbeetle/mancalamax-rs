@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
 
@@ -83,12 +82,12 @@ pub(crate) trait Mancala: sealed::MancalaPrivate + Display {
         // TODO: Technically, this doesn't cover all cases where swap is allowed.
         self.current_turn() == Player::Two && self.ply() == 2
     }
-    fn valid_moves(&self) -> HashSet<Move> {
-        let mut moves = HashSet::new();
+    fn valid_moves(&self) -> Vec<Move> {
+        let mut moves = Vec::new();
 
         // If the Swap move is available for player 2.
         if self.swap_allowed() {
-            moves.insert(Move::Swap);
+            moves.insert(0, Move::Swap);
         }
 
         // List all pits where the number of stones > 0.
@@ -98,7 +97,7 @@ pub(crate) trait Mancala: sealed::MancalaPrivate + Display {
             .enumerate()
         {
             if *pit > 0 {
-                moves.insert(Move::Pit(i + 1));
+                moves.insert(0, Move::Pit(i + 1));
             }
         }
 
