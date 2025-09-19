@@ -2,33 +2,37 @@ use crate::game::{GameState, Mancala, Move, Player};
 use std::cell::Cell;
 use std::time::{Duration, Instant};
 
-pub(crate) type StateEvalFn<const N: usize> = fn(&GameState<N>, player: Player) -> f32;
+pub(crate) type StateEvalFn<T> = fn(&T, player: Player) -> f32;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Minimax<const N: usize> {
+pub(crate) struct Minimax<T: Mancala> {
     optimize_for: Player,
     max_depth: Option<usize>,
     max_time: Option<Duration>,
     iterative_deepening: bool,
-    evaluator: StateEvalFn<N>,
-    heuristic: StateEvalFn<N>,
+    evaluator: StateEvalFn<T>,
+    heuristic: StateEvalFn<T>,
     current_depth: Cell<usize>,
     start_time: Cell<Option<Instant>>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct MinimaxBuilder<const N: usize> {
+pub(crate) struct MinimaxBuilder<T: Mancala> {
     optimize_for: Player,
     max_depth: Option<usize>,
     max_time: Option<Duration>,
     iterative_deepening: bool,
-    evaluator: StateEvalFn<N>,
-    heuristic: StateEvalFn<N>,
+    evaluator: StateEvalFn<T>,
+    heuristic: StateEvalFn<T>,
 }
 
-impl<const N: usize> MinimaxBuilder<N> {
+impl<T: Mancala> MinimaxBuilder<T> {
     pub(crate) fn new() -> Self {
         Self::default()
+    }
+    pub(crate) fn optimize_for(mut self, p: Player) -> Self {
+        self.optimize_for = p;
+        self
     }
     pub(crate) fn max_depth(mut self, depth: Option<usize>) -> Self {
         self.max_depth = depth;
@@ -42,15 +46,15 @@ impl<const N: usize> MinimaxBuilder<N> {
         self.iterative_deepening = iterative;
         self
     }
-    pub(crate) fn evaluator(mut self, e: StateEvalFn<N>) -> Self {
+    pub(crate) fn evaluator(mut self, e: StateEvalFn<T>) -> Self {
         self.evaluator = e;
         self
     }
-    pub(crate) fn heuristic(mut self, h: StateEvalFn<N>) -> Self {
+    pub(crate) fn heuristic(mut self, h: StateEvalFn<T>) -> Self {
         self.heuristic = h;
         self
     }
-    pub(crate) fn build(&self) -> Minimax<N> {
+    pub(crate) fn build(&self) -> Minimax<T> {
         Minimax {
             optimize_for: self.optimize_for,
             max_depth: self.max_depth,
@@ -64,15 +68,9 @@ impl<const N: usize> MinimaxBuilder<N> {
     }
 }
 
-impl MinimaxBuilder<6> {
-    pub(crate) fn new_standard() -> Self {
-        Self::default()
-    }
-}
-
-impl<const N: usize> Default for MinimaxBuilder<N> {
+impl<T: Mancala> Default for MinimaxBuilder<T> {
     fn default() -> Self {
-        let evaluator = |s: &GameState<N>, p: Player| match p {
+        let evaluator = |s: &T, p: Player| match p {
             Player::One => (s.score(Player::One) - s.score(Player::Two)) as f32,
             Player::Two => (s.score(Player::Two) - s.score(Player::One)) as f32,
         };
@@ -88,7 +86,7 @@ impl<const N: usize> Default for MinimaxBuilder<N> {
     }
 }
 
-impl<const N: usize> Minimax<N> {
+impl<T: Mancala> Minimax<T> {
     pub(crate) fn optimize_for(&self) -> Player {
         self.optimize_for
     }
@@ -107,14 +105,14 @@ impl<const N: usize> Minimax<N> {
     pub(crate) fn start_time(&self) -> Option<Instant> {
         self.start_time.get()
     }
-    pub(crate) fn call_evaluator(&self, state: &GameState<N>) -> f32 {
+    pub(crate) fn call_evaluator(&self, state: &T) -> f32 {
         (self.evaluator)(state, self.optimize_for)
     }
-    pub(crate) fn call_heuristic(&self, state: &GameState<N>) -> f32 {
+    pub(crate) fn call_heuristic(&self, state: &T) -> f32 {
         (self.heuristic)(state, self.optimize_for)
     }
 
-    pub(crate) fn search(&self, state: &GameState<N>) -> Option<Move> {
+    pub(crate) fn search(&self, state: &T) -> Option<Move> {
         self.start_time.set(Some(Instant::now()));
         self.current_depth.set(0);
 
@@ -134,7 +132,7 @@ impl<const N: usize> Minimax<N> {
         }
     }
 
-    fn max_value(&self, state: &GameState<N>, alpha: f32, beta: f32) -> (Option<Move>, f32) {
+    fn max_value(&self, state: &T, alpha: f32, beta: f32) -> (Option<Move>, f32) {
         assert_ne!(
             self.start_time.get(),
             None,
@@ -179,7 +177,7 @@ impl<const N: usize> Minimax<N> {
         (best_move, v)
     }
 
-    fn min_value(&self, state: &GameState<N>, alpha: f32, beta: f32) -> (Option<Move>, f32) {
+    fn min_value(&self, state: &T, alpha: f32, beta: f32) -> (Option<Move>, f32) {
         assert_ne!(
             self.start_time(),
             None,

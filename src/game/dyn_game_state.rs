@@ -29,8 +29,10 @@ impl Default for DynGameState {
     }
 }
 
-impl MancalaPrivate<Vec<usize>> for DynGameState {
-    fn board_mut(&mut self) -> &mut [Vec<usize>; 2] {
+impl MancalaPrivate for DynGameState {
+    type Board = Vec<usize>;
+
+    fn board_mut(&mut self) -> &mut [Self::Board; 2] {
         &mut self.board
     }
     fn stores_mut(&mut self) -> &mut [usize; 2] {
@@ -44,8 +46,8 @@ impl MancalaPrivate<Vec<usize>> for DynGameState {
     }
 }
 
-impl Mancala<Vec<usize>> for DynGameState {
-    fn board(&self) -> &[Vec<usize>; 2] {
+impl Mancala for DynGameState {
+    fn board(&self) -> &[Self::Board; 2] {
         &self.board
     }
 

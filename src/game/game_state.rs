@@ -29,8 +29,9 @@ impl Default for GameState<6> {
     }
 }
 
-impl<const N: usize> MancalaPrivate<[usize; N]> for GameState<N> {
-    fn board_mut(&mut self) -> &mut [[usize; N]; 2] {
+impl<const N: usize> MancalaPrivate for GameState<N> {
+    type Board = [usize; N];
+    fn board_mut(&mut self) -> &mut [Self::Board; 2] {
         &mut self.board
     }
     fn stores_mut(&mut self) -> &mut [usize; 2] {
@@ -44,8 +45,8 @@ impl<const N: usize> MancalaPrivate<[usize; N]> for GameState<N> {
     }
 }
 
-impl<const N: usize> Mancala<[usize; N]> for GameState<N> {
-    fn board(&self) -> &[[usize; N]; 2] {
+impl<const N: usize> Mancala for GameState<N> {
+    fn board(&self) -> &[Self::Board; 2] {
         &self.board
     }
 

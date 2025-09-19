@@ -1,10 +1,9 @@
 use super::mancala::{Mancala, Player};
 use std::fmt::Formatter;
 
-pub(super) fn fmt_common<T, B>(f: &mut Formatter, state: &T, title: &str) -> std::fmt::Result
+pub(super) fn fmt_common<T>(f: &mut Formatter, state: &T, title: &str) -> std::fmt::Result
 where
-    T: Mancala<B>,
-    B: AsRef<[usize]> + AsMut<[usize]>,
+    T: Mancala,
 {
     let header = format!("Bird's-Eye View of {} {:p}", title, state);
     writeln!(f, "{}", header)?;

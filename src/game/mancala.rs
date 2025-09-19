@@ -37,10 +37,8 @@ pub(crate) enum Move {
 pub(super) mod sealed {
     use super::Player;
 
-    pub trait MancalaPrivate<B>: Clone
-    where
-        B: AsRef<[usize]> + AsMut<[usize]>,
-    {
+    pub trait MancalaPrivate: Clone {
+        type Board: AsRef<[usize]> + AsMut<[usize]>;
         fn switch_turn(&mut self) -> Player {
             let turn = *self.current_turn_mut();
             *self.current_turn_mut() = if turn == Player::One {
@@ -54,17 +52,14 @@ pub(super) mod sealed {
             self.board_mut().swap(0, 1);
             self.stores_mut().swap(0, 1);
         }
-        fn board_mut(&mut self) -> &mut [B; 2];
+        fn board_mut(&mut self) -> &mut [Self::Board; 2];
         fn stores_mut(&mut self) -> &mut [usize; 2];
         fn ply_mut(&mut self) -> &mut usize;
         fn current_turn_mut(&mut self) -> &mut Player;
     }
 }
 
-pub(crate) trait Mancala<B>: sealed::MancalaPrivate<B> + Display
-where
-    B: AsRef<[usize]> + AsMut<[usize]>,
-{
+pub(crate) trait Mancala: sealed::MancalaPrivate + Display {
     fn board_as_vecs(&self) -> [Vec<usize>; 2] {
         [
             self.board()[0].as_ref().to_vec(),
@@ -237,7 +232,7 @@ where
     fn pits(&self) -> usize {
         self.board()[0].as_ref().len()
     }
-    fn board(&self) -> &[B; 2];
+    fn board(&self) -> &[Self::Board; 2];
     fn stores(&self) -> &[usize; 2];
     fn ply(&self) -> usize;
     fn current_turn(&self) -> Player;
