@@ -1,5 +1,32 @@
 use std::collections::HashSet;
 use std::fmt::Display;
+use std::ops::{Index, IndexMut};
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub(crate) enum Player {
+    One,
+    Two,
+}
+
+impl<T> Index<Player> for [T] {
+    type Output = T;
+
+    fn index(&self, index: Player) -> &Self::Output {
+        match index {
+            Player::One => &self[0],
+            Player::Two => &self[1],
+        }
+    }
+}
+
+impl<T> IndexMut<Player> for [T] {
+    fn index_mut(&mut self, index: Player) -> &mut Self::Output {
+        match index {
+            Player::One => &mut self[0],
+            Player::Two => &mut self[1],
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub(crate) enum Move {
@@ -8,13 +35,19 @@ pub(crate) enum Move {
 }
 
 pub(super) mod sealed {
+    use super::Player;
+
     pub trait MancalaPrivate<B>: Clone
     where
-      B: AsRef<[usize]> + AsMut<[usize]>,
+        B: AsRef<[usize]> + AsMut<[usize]>,
     {
-        fn switch_turn(&mut self) -> usize {
+        fn switch_turn(&mut self) -> Player {
             let turn = *self.current_turn_mut();
-            *self.current_turn_mut() = if turn == 0 { 1 } else { 0 };
+            *self.current_turn_mut() = if turn == Player::One {
+                Player::Two
+            } else {
+                Player::One
+            };
             *self.current_turn_mut()
         }
         fn rotate_board(&mut self) {
@@ -24,13 +57,13 @@ pub(super) mod sealed {
         fn board_mut(&mut self) -> &mut [B; 2];
         fn stores_mut(&mut self) -> &mut [usize; 2];
         fn ply_mut(&mut self) -> &mut usize;
-        fn current_turn_mut(&mut self) -> &mut usize;
+        fn current_turn_mut(&mut self) -> &mut Player;
     }
 }
 
 pub(crate) trait Mancala<B>: sealed::MancalaPrivate<B> + Display
 where
-  B: AsRef<[usize]> + AsMut<[usize]>,
+    B: AsRef<[usize]> + AsMut<[usize]>,
 {
     fn board_as_vecs(&self) -> [Vec<usize>; 2] {
         [
@@ -48,18 +81,12 @@ where
         }
         true
     }
-    fn score(&self, player: usize) -> usize {
-        assert!(
-            player < 2,
-            "Mancala::score received invalid player index \
-            (got {}, expected 0 or 1)",
-            player
-        );
+    fn score(&self, player: Player) -> usize {
         self.stores()[player]
     }
     fn swap_allowed(&self) -> bool {
         // TODO: Technically, this doesn't cover all cases where swap is allowed.
-        self.current_turn() == 1 && self.ply() == 2
+        self.current_turn() == Player::Two && self.ply() == 2
     }
     fn valid_moves(&self) -> HashSet<Move> {
         let mut moves = HashSet::new();
@@ -70,7 +97,11 @@ where
         }
 
         // List all pits where the number of stones > 0.
-        for (i, pit) in self.board()[self.current_turn()].as_ref().iter().enumerate() {
+        for (i, pit) in self.board()[self.current_turn()]
+            .as_ref()
+            .iter()
+            .enumerate()
+        {
             if *pit > 0 {
                 moves.insert(Move::Pit(i + 1));
             }
@@ -130,7 +161,11 @@ where
                 }
 
                 // Switch board sides.
-                side = if side == 0 { 1 } else { 0 };
+                side = if side == Player::One {
+                    Player::Two
+                } else {
+                    Player::One
+                };
                 pit = 0;
 
                 // If we did not add to the store, make sure to add one to the next player's store.
@@ -146,10 +181,10 @@ where
 
             // Determine which stones to capture (if any).
             if last_stone
-              && side == new_state.current_turn()
-              && new_state.board()[side].as_ref()[pit] == 1
+                && side == new_state.current_turn()
+                && new_state.board()[side].as_ref()[pit] == 1
             {
-                let to_capture = if side == 0 {
+                let to_capture = if side == Player::One {
                     [pit, new_state.pits() - pit - 1]
                 } else {
                     [new_state.pits() - pit - 1, pit]
@@ -193,11 +228,17 @@ where
 
         Some(new_state)
     }
+    fn make_move_pit(&self, pit: usize) -> Option<Self> {
+        self.make_move(Move::Pit(pit))
+    }
+    fn make_move_swap(&self) -> Option<Self> {
+        self.make_move(Move::Swap)
+    }
     fn pits(&self) -> usize {
         self.board()[0].as_ref().len()
     }
     fn board(&self) -> &[B; 2];
     fn stores(&self) -> &[usize; 2];
     fn ply(&self) -> usize;
-    fn current_turn(&self) -> usize;
+    fn current_turn(&self) -> Player;
 }

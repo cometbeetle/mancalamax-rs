@@ -1,7 +1,7 @@
-use super::mancala::sealed::MancalaPrivate;
-use super::mancala::Mancala;
-use super::dyn_game_state::DynGameState;
 use super::common::fmt_common;
+use super::dyn_game_state::DynGameState;
+use super::mancala::sealed::MancalaPrivate;
+use super::mancala::{Mancala, Player};
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, Copy)]
@@ -9,7 +9,7 @@ pub(crate) struct GameState<const N: usize> {
     board: [[usize; N]; 2],
     stores: [usize; 2],
     ply: usize,
-    current_turn: usize,
+    current_turn: Player,
 }
 
 impl<const N: usize> Display for GameState<N> {
@@ -24,7 +24,7 @@ impl Default for GameState<6> {
             board: [[4; 6]; 2],
             stores: [0, 0],
             ply: 1,
-            current_turn: 0,
+            current_turn: Player::One,
         }
     }
 }
@@ -39,7 +39,7 @@ impl<const N: usize> MancalaPrivate<[usize; N]> for GameState<N> {
     fn ply_mut(&mut self) -> &mut usize {
         &mut self.ply
     }
-    fn current_turn_mut(&mut self) -> &mut usize {
+    fn current_turn_mut(&mut self) -> &mut Player {
         &mut self.current_turn
     }
 }
@@ -57,7 +57,7 @@ impl<const N: usize> Mancala<[usize; N]> for GameState<N> {
         self.ply
     }
 
-    fn current_turn(&self) -> usize {
+    fn current_turn(&self) -> Player {
         self.current_turn
     }
 }
@@ -84,7 +84,7 @@ impl<const N: usize> GameState<N> {
         stones_per: usize,
         store_1: usize,
         store_2: usize,
-        current_turn: usize,
+        current_turn: Player,
         ply: usize,
     ) -> Self {
         Self {
@@ -98,7 +98,7 @@ impl<const N: usize> GameState<N> {
         board: &Vec<Vec<usize>>,
         store_1: usize,
         store_2: usize,
-        current_turn: usize,
+        current_turn: Player,
         ply: usize,
     ) -> Self {
         assert_eq!(
@@ -134,7 +134,7 @@ impl<const N: usize> GameState<N> {
         board: [[usize; N]; 2],
         store_1: usize,
         store_2: usize,
-        current_turn: usize,
+        current_turn: Player,
         ply: usize,
     ) -> Self {
         Self {

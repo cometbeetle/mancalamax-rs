@@ -1,15 +1,15 @@
-use std::fmt::{Display, Formatter};
-use super::mancala::sealed::MancalaPrivate;
-use super::mancala::Mancala;
 use super::common::fmt_common;
 use super::game_state::GameState;
+use super::mancala::sealed::MancalaPrivate;
+use super::mancala::{Mancala, Player};
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone)]
 pub(crate) struct DynGameState {
     board: [Vec<usize>; 2],
     stores: [usize; 2],
     ply: usize,
-    current_turn: usize,
+    current_turn: Player,
 }
 
 impl Display for DynGameState {
@@ -24,7 +24,7 @@ impl Default for DynGameState {
             board: [vec![4; 6], vec![4; 6]],
             stores: [0, 0],
             ply: 1,
-            current_turn: 0,
+            current_turn: Player::One,
         }
     }
 }
@@ -39,7 +39,7 @@ impl MancalaPrivate<Vec<usize>> for DynGameState {
     fn ply_mut(&mut self) -> &mut usize {
         &mut self.ply
     }
-    fn current_turn_mut(&mut self) -> &mut usize {
+    fn current_turn_mut(&mut self) -> &mut Player {
         &mut self.current_turn
     }
 }
@@ -57,7 +57,7 @@ impl Mancala<Vec<usize>> for DynGameState {
         self.ply
     }
 
-    fn current_turn(&self) -> usize {
+    fn current_turn(&self) -> Player {
         self.current_turn
     }
 }
@@ -79,7 +79,7 @@ impl DynGameState {
         stones_per: usize,
         store_1: usize,
         store_2: usize,
-        current_turn: usize,
+        current_turn: Player,
         ply: usize,
     ) -> Self {
         Self {
@@ -93,7 +93,7 @@ impl DynGameState {
         board: &Vec<Vec<usize>>,
         store_1: usize,
         store_2: usize,
-        current_turn: usize,
+        current_turn: Player,
         ply: usize,
     ) -> Self {
         assert_eq!(
@@ -123,7 +123,7 @@ impl DynGameState {
         board: [[usize; N]; 2],
         store_1: usize,
         store_2: usize,
-        current_turn: usize,
+        current_turn: Player,
         ply: usize,
     ) -> Self {
         Self {
