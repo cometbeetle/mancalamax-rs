@@ -1,15 +1,13 @@
-use crate::game::{DynGameState, GameState, Mancala};
-
 mod game;
 mod minimax;
 
-fn main() {
-    let board = [[1, 1, 1], [1, 1, 1]];
-    let b2 = vec![vec![1, 1, 1], vec![1, 1, 1]];
-    let x = GameState::from_arr(board, 1, 2, 0, 0);
-    let y = DynGameState::from_vec(b2, 1, 1, 0, 0);
+use crate::game::{GameState, Mancala, Move};
 
-    let z = GameState::default();
+fn main() {
+    let s = GameState::default();
+    println!("{}", s);
+    let s = s.make_move(Move::Pit(3)).unwrap();
+    println!("{}", s);
 }
 
-// TODO: Implement the minimax algorithm using
+// TODO: Implement the minimax algorithm using alpha-beta pruning.
