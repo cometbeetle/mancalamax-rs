@@ -3,14 +3,18 @@ mod minimax;
 
 use crate::game::{GameState, Mancala};
 use crate::minimax::MinimaxBuilder;
+use std::time::Duration;
 
 fn main() {
     let s = GameState::default();
     println!("{}", s);
-    let s = s.make_move_pit(2).unwrap();
-    println!("{}", s);
 
-    let minimax = MinimaxBuilder::new_standard().build();
+    let mut minimax = MinimaxBuilder::new_standard()
+        .max_depth(None)
+        .max_time(Duration::from_secs(10))
+        .build();
+    let best_move = minimax.search(&s);
+    println!("Best move: {:?}", best_move);
 }
 
-// TODO: Finish implementing the minimax algorithm using alpha-beta pruning.
+// TODO: Finish iterative deepening.

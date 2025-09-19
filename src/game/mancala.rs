@@ -81,8 +81,8 @@ where
         }
         true
     }
-    fn score(&self, player: Player) -> usize {
-        self.stores()[player]
+    fn score(&self, player: Player) -> isize {
+        self.stores()[player] as isize
     }
     fn swap_allowed(&self) -> bool {
         // TODO: Technically, this doesn't cover all cases where swap is allowed.
