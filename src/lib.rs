@@ -1,5 +1,6 @@
 pub mod game;
 pub mod minimax;
+pub mod ui;
 
 #[cfg(test)]
 mod tests {
