@@ -2,10 +2,10 @@ use crate::game::{GameState, Mancala, Move, Player};
 use std::cell::Cell;
 use std::time::{Duration, Instant};
 
-pub(crate) type StateEvalFn<T> = fn(&T, player: Player) -> f32;
+pub type StateEvalFn<T> = fn(&T, player: Player) -> f32;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Minimax<T: Mancala> {
+pub struct Minimax<T: Mancala> {
     optimize_for: Player,
     max_depth: Option<usize>,
     max_time: Option<Duration>,
@@ -16,7 +16,7 @@ pub(crate) struct Minimax<T: Mancala> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct MinimaxBuilder<T: Mancala> {
+pub struct MinimaxBuilder<T: Mancala> {
     optimize_for: Player,
     max_depth: Option<usize>,
     max_time: Option<Duration>,
@@ -26,34 +26,34 @@ pub(crate) struct MinimaxBuilder<T: Mancala> {
 }
 
 impl<T: Mancala> MinimaxBuilder<T> {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
-    pub(crate) fn optimize_for(mut self, p: Player) -> Self {
+    pub fn optimize_for(mut self, p: Player) -> Self {
         self.optimize_for = p;
         self
     }
-    pub(crate) fn max_depth(mut self, depth: Option<usize>) -> Self {
+    pub fn max_depth(mut self, depth: Option<usize>) -> Self {
         self.max_depth = depth;
         self
     }
-    pub(crate) fn max_time(mut self, time: Duration) -> Self {
+    pub fn max_time(mut self, time: Duration) -> Self {
         self.max_time = Some(time);
         self
     }
-    pub(crate) fn iterative_deepening(mut self, iterative: bool) -> Self {
+    pub fn iterative_deepening(mut self, iterative: bool) -> Self {
         self.iterative_deepening = iterative;
         self
     }
-    pub(crate) fn evaluator(mut self, e: StateEvalFn<T>) -> Self {
+    pub fn evaluator(mut self, e: StateEvalFn<T>) -> Self {
         self.evaluator = e;
         self
     }
-    pub(crate) fn heuristic(mut self, h: StateEvalFn<T>) -> Self {
+    pub fn heuristic(mut self, h: StateEvalFn<T>) -> Self {
         self.heuristic = h;
         self
     }
-    pub(crate) fn build(&self) -> Minimax<T> {
+    pub fn build(&self) -> Minimax<T> {
         Minimax {
             optimize_for: self.optimize_for,
             max_depth: self.max_depth,
@@ -85,29 +85,29 @@ impl<T: Mancala> Default for MinimaxBuilder<T> {
 }
 
 impl<T: Mancala> Minimax<T> {
-    pub(crate) fn optimize_for(&self) -> Player {
+    pub fn optimize_for(&self) -> Player {
         self.optimize_for
     }
-    pub(crate) fn max_depth(&self) -> Option<usize> {
+    pub fn max_depth(&self) -> Option<usize> {
         self.max_depth
     }
-    pub(crate) fn max_time(&self) -> Option<Duration> {
+    pub fn max_time(&self) -> Option<Duration> {
         self.max_time
     }
-    pub(crate) fn iterative_deepening(&self) -> bool {
+    pub fn iterative_deepening(&self) -> bool {
         self.iterative_deepening
     }
-    pub(crate) fn start_time(&self) -> Option<Instant> {
+    pub fn start_time(&self) -> Option<Instant> {
         self.start_time.get()
     }
-    pub(crate) fn call_evaluator(&self, state: &T) -> f32 {
+    pub fn call_evaluator(&self, state: &T) -> f32 {
         (self.evaluator)(state, self.optimize_for)
     }
-    pub(crate) fn call_heuristic(&self, state: &T) -> f32 {
+    pub fn call_heuristic(&self, state: &T) -> f32 {
         (self.heuristic)(state, self.optimize_for)
     }
 
-    pub(crate) fn search(&self, state: &T) -> Option<Move> {
+    pub fn search(&self, state: &T) -> Option<Move> {
         self.start_time.set(Some(Instant::now()));
 
         // TODO: Implement iterative deepening.

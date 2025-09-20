@@ -2,7 +2,7 @@ use std::fmt::Display;
 use std::ops::{Index, IndexMut};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub(crate) enum Player {
+pub enum Player {
     One,
     Two,
 }
@@ -28,7 +28,7 @@ impl<T> IndexMut<Player> for [T] {
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub(crate) enum Move {
+pub enum Move {
     Pit(usize),
     Swap,
 }
@@ -58,7 +58,7 @@ pub(super) mod sealed {
     }
 }
 
-pub(crate) trait Mancala: sealed::MancalaPrivate + Display {
+pub trait Mancala: sealed::MancalaPrivate + Display {
     fn board_as_vecs(&self) -> [Vec<usize>; 2] {
         [
             self.board()[0].as_ref().to_vec(),

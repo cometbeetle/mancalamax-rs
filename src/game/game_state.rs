@@ -5,7 +5,7 @@ use super::mancala::{Mancala, Player};
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct GameState<const N: usize> {
+pub struct GameState<const N: usize> {
     board: [[usize; N]; 2],
     stores: [usize; 2],
     ply: usize,
@@ -81,7 +81,7 @@ impl<const N: usize> From<DynGameState> for GameState<N> {
 }
 
 impl<const N: usize> GameState<N> {
-    pub(crate) fn new(
+    pub fn new(
         stones_per: usize,
         store_1: usize,
         store_2: usize,
@@ -95,7 +95,7 @@ impl<const N: usize> GameState<N> {
             current_turn,
         }
     }
-    pub(crate) fn from_vec(
+    pub fn from_vec(
         board: &Vec<Vec<usize>>,
         store_1: usize,
         store_2: usize,
@@ -131,7 +131,7 @@ impl<const N: usize> GameState<N> {
             current_turn,
         }
     }
-    pub(crate) fn from_arr(
+    pub fn from_arr(
         board: [[usize; N]; 2],
         store_1: usize,
         store_2: usize,
