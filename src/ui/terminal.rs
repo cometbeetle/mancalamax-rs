@@ -1,3 +1,5 @@
+//! Components for the terminal user interface.
+
 use crate::game::{GameOutcome, GameState, Mancala, Move, Player};
 use crate::minimax::MinimaxBuilder;
 use rand::seq::IndexedRandom;

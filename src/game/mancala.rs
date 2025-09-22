@@ -3,11 +3,11 @@
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
 
-/// Mancala games have two players. Therefore, the `Player` enum can be one
-/// of two variants, `One`, or `Two`.
+/// Mancala games have two players. Therefore, the [`Player`] enum can be one
+/// of two variants, [`One`][Self::One], or [`Two`][Self::Two].
 ///
-/// Can be converted to `usize`, or used as an index, where `One` is index
-/// 0, and `Two` is index 1.
+/// Can be converted to [`usize`], or used as an index, where [`One`][Self::One]
+/// is index 0, and [`Two`][Self::Two] is index 1.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Player {
     One,
@@ -43,12 +43,13 @@ impl From<Player> for usize {
     }
 }
 
-/// The `Move` enum represents one of the two types of move during
-/// Mancala gameplay. Players can either select a pit from which to
-/// distribute stones, or, under certain circumstances at the beginning
-/// of the game, the second player can swap the board.
+/// Represents one of the two types of move during Mancala gameplay.
 ///
-/// If the `Pit` variant is instantiated, it stores a `usize` value
+/// Players can either select a pit from which to distribute stones, or,
+/// under certain circumstances at the beginning of the game, the second
+/// player can swap the board.
+///
+/// If the [`Pit`][Self::Pit] variant is instantiated, it stores a [`usize`] value
 /// indicating which pit (starting from pit 1) is to be chosen.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Move {
@@ -56,9 +57,9 @@ pub enum Move {
     Swap,
 }
 
-/// The `GameOutcome` enum is used to describe the current outcome of a
-/// game state. During gameplay, there can either be a winner, a tie, or
-/// the game may still be ongoing.
+/// Used to describe the current outcome of a game state.
+///
+/// During gameplay, there can either be a winner, a tie, or the game may still be ongoing.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum GameOutcome {
     Winner(Player),
@@ -66,16 +67,15 @@ pub enum GameOutcome {
     Ongoing,
 }
 
-/// The `Mancala` trait provides a default implementation of Mancala gameplay
-/// for all implementors. It also specifies certain accessor and mutable reference
-/// methods that must be implemented on a per-type basis (i.e., no default
-/// implementation can be provided).
+/// Provides a default implementation of Mancala gameplay for all implementors,
+/// and specifies certain accessor and mutable reference methods that must be
+/// implemented on a per-type basis (i.e., no default implementation can be provided).
 pub trait Mancala: Clone + Display {
     /// Used to indicate the underlying array-like type used to store
     /// the board contents for each player.
     type Board: AsRef<[usize]> + AsMut<[usize]>;
 
-    /// Converts the current board into an array of two `Vec` instances for easy access.
+    /// Converts the current board into an array of two [`Vec`] instances for easy access.
     fn board_as_vecs(&self) -> [Vec<usize>; 2] {
         [
             self.board()[0].as_ref().to_vec(),
@@ -146,7 +146,7 @@ pub trait Mancala: Clone + Display {
         moves
     }
 
-    /// Switches the current turn. Used inside `make_move`.
+    /// Switches the current turn. Used inside [`make_move`][Self::make_move].
     fn switch_turn(&mut self) -> Player {
         let turn = *self.current_turn_mut();
         *self.current_turn_mut() = if turn == Player::One {
@@ -157,17 +157,17 @@ pub trait Mancala: Clone + Display {
         *self.current_turn_mut()
     }
 
-    /// Rotates the board. Used inside `make_move` when the swap move is requested.
+    /// Rotates the board. Used inside [`make_move`][Self::make_move] when the swap move is requested.
     fn rotate_board(&mut self) {
         self.board_mut().swap(0, 1);
         self.stores_mut().swap(0, 1);
     }
 
     /// Returns a new board state, updated to reflect the result of making
-    /// the specified move. If the move was invalid, returns `None`.
+    /// the specified move. If the move was invalid, returns [`None`].
     ///
-    /// The default implementation of `make_move` roughly follows the gameplay
-    /// rules of the "Kalah" variant of Mancala.
+    /// The default implementation of [`make_move`][Self::make_move] roughly
+    /// follows the gameplay rules of the "Kalah" variant of Mancala.
     fn make_move(&self, selection: Move) -> Option<Self> {
         // Make a copy of the current state.
         let mut new_state = self.clone();

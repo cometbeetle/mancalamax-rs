@@ -1,19 +1,20 @@
+//! Definitions and implementations for statically sized Mancala game states.
+
 use super::common::fmt_common;
 use super::dyn_game_state::DynGameState;
 use super::mancala::{Mancala, Player};
 use std::fmt::{Display, Formatter};
 
-/// The `GameState` struct stores the necessary components of a Mancala
-/// game, including the board, each player's store, the current ply, and
-/// the player currently allowed to move. `GameState` uses a statically
-/// sized board for use in scenarios where the desired board size
-/// is known at compile time. This provides higher performance than
-/// `DynGameState`, especially in scenarios where repeated state
-/// creation / modification is necessary (i.e., during the execution
-/// of the minimax algorithm).
+/// Stores the necessary components of a Mancala game, including the board,
+/// each player's store, the current ply, and the player currently allowed to move.
 ///
-/// It implements the `Mancala` trait, and can be converted to and from
-/// `DynGameState` structs.
+/// Uses a statically sized board for use in scenarios where the desired board size is
+/// known at compile time. This provides higher performance than [`DynGameState`],
+/// especially in scenarios where repeated state creation / modification is necessary
+/// (i.e., during the execution of the minimax algorithm).
+///
+/// Implements the [`Mancala`] trait, and can be converted to and from
+/// [`DynGameState`] structs.
 #[derive(Debug, Clone, Copy)]
 pub struct GameState<const N: usize> {
     board: [[usize; N]; 2],
@@ -109,7 +110,7 @@ impl<const N: usize> From<DynGameState> for GameState<N> {
 }
 
 impl<const N: usize> GameState<N> {
-    /// Create a new `GameState` based on a series of parameters used
+    /// Create a new [`GameState`] based on a series of parameters used
     /// to construct a starting game of Mancala.
     pub fn new(
         stones_per: usize,
@@ -126,13 +127,13 @@ impl<const N: usize> GameState<N> {
         }
     }
 
-    /// Create a new `GameState` based on a preexisting board, stored as a
-    /// `Vec` of `Vec` structs. The input vector must have an effective shape
+    /// Create a new [`GameState`] based on a preexisting board, stored as a
+    /// [`Vec`] of [`Vec`] structs. The input vector must have an effective shape
     /// of `(2, N)`, where `N` is the number of pits per player.
     ///
-    /// Note that because the size of `Vec` structs is not known at compile time,
+    /// Note that because the size of [`Vec`] structs is not known at compile time,
     /// the board length `N` must be specified correctly in the generic call to
-    /// `GameState::from_vec`.
+    /// [`GameState::from_vec`].
     pub fn from_vec(
         board: &Vec<Vec<usize>>,
         store_1: usize,
@@ -170,7 +171,7 @@ impl<const N: usize> GameState<N> {
         }
     }
 
-    /// Create a new `GameState` based on a preexisting board array.
+    /// Create a new [`GameState`] based on a preexisting board array.
     pub fn from_arr(
         board: [[usize; N]; 2],
         store_1: usize,

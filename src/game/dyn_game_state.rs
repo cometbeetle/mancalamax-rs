@@ -5,14 +5,14 @@ use super::game_state::GameState;
 use super::mancala::{Mancala, Player};
 use std::fmt::{Display, Formatter};
 
-/// The `DynGameState` struct stores the necessary components of a Mancala
-/// game, including the board, each player's store, the current ply, and
-/// the player currently allowed to move. `DynGameState` uses a dynamically
-/// sized board for use in scenarios where the desired board size
+/// Stores the necessary components of a Mancala game, including the board,
+/// each player's store, the current ply, and the player currently allowed to move.
+///
+/// Uses a dynamically sized board for use in scenarios where the desired board size
 /// is not known at compile time.
 ///
-/// It implements the `Mancala` trait, and can be converted to and from
-/// `GameState` structs.
+/// Implements the [`Mancala`] trait, and can be converted to and from
+/// [`GameState`] structs.
 #[derive(Debug, Clone)]
 pub struct DynGameState {
     board: [Vec<usize>; 2],
@@ -86,7 +86,7 @@ impl<const N: usize> From<GameState<N>> for DynGameState {
 }
 
 impl DynGameState {
-    /// Create a new `DynGameState` based on a series of parameters used
+    /// Create a new [`DynGameState`] based on a series of parameters used
     /// to construct a starting game of Mancala.
     pub fn new(
         pits: usize,
@@ -104,8 +104,8 @@ impl DynGameState {
         }
     }
 
-    /// Create a new `DynGameState` based on a preexisting board, stored as a
-    /// `Vec` of `Vec` structs. The input vector must have an effective shape
+    /// Create a new [`DynGameState`] based on a preexisting board, stored as a
+    /// [`Vec`] of [`Vec`] structs. The input vector must have an effective shape
     /// of `(2, N)`, where `N` is the number of pits per player.
     pub fn from_vec(
         board: &Vec<Vec<usize>>,
@@ -138,7 +138,7 @@ impl DynGameState {
         }
     }
 
-    /// Create a new `DynGameState` based on a preexisting board array.
+    /// Create a new [`DynGameState`] based on a preexisting board array.
     pub fn from_arr<const N: usize>(
         board: [[usize; N]; 2],
         store_1: usize,

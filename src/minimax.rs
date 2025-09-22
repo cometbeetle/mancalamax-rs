@@ -7,14 +7,13 @@ use std::time::{Duration, Instant};
 
 /// Type alias for any function that evaluates a reference to a type
 /// (usually some kind of Mancala game state) and a current player,
-/// and produces a `f32` value indicating some level of utility.
+/// and produces a [`f32`] value indicating some level of utility.
 /// Positive values indicate higher utility.
 pub type StateEvalFn<T> = fn(&T, player: Player) -> f32;
 
-/// The `Minimax` struct stores the necessary information for executing the
-/// minimax algorithm on a Mancala board state in order to determine the
-/// most optimal move (i.e., the one that maximizes utility, or is calculated
-/// as best based on some heuristic).
+/// Stores the necessary information for executing the minimax algorithm on a
+/// Mancala board state in order to determine the most optimal move (i.e.,
+/// the one that maximizes utility, or is calculated as best based on some heuristic).
 #[derive(Debug, Clone)]
 pub struct Minimax<T: Mancala> {
     optimize_for: Player,
@@ -26,8 +25,7 @@ pub struct Minimax<T: Mancala> {
     start_time: Cell<Option<Instant>>,
 }
 
-/// The `MinimaxBuilder` struct acts as a helper for constructing `Minimax`
-/// instances based on certain specifications.
+/// Helper for constructing [Minimax] instances based on certain specifications.
 #[derive(Debug, Clone, Copy)]
 pub struct MinimaxBuilder<T: Mancala> {
     optimize_for: Player,
@@ -39,7 +37,7 @@ pub struct MinimaxBuilder<T: Mancala> {
 }
 
 impl<T: Mancala> MinimaxBuilder<T> {
-    /// Construct a new `MinimaxBuilder` instance using the default configuration.
+    /// Construct a new [MinimaxBuilder] instance using the default configuration.
     pub fn new() -> Self {
         Self::default()
     }
@@ -52,12 +50,11 @@ impl<T: Mancala> MinimaxBuilder<T> {
 
     /// Set the maximum search depth.
     ///
-    /// `None` means no search depth limit.
+    /// [`None`] means no search depth limit.
     ///
-    /// WARNING: If `None` is selected, and `max_time` is also set to `None`,
-    /// the algorithm will not terminate unless all states have been searched,
-    /// which may take time exponential in the number of remaining move
-    /// combinations.
+    /// WARNING: If [`None`] is selected, and [`max_time`](Self::max_time) is also set to
+    /// [`None`], the algorithm will not terminate unless all states have been searched,
+    /// which may take time exponential in the number of remaining move combinations.
     pub fn max_depth(mut self, depth: Option<usize>) -> Self {
         self.max_depth = depth;
         self
@@ -65,12 +62,11 @@ impl<T: Mancala> MinimaxBuilder<T> {
 
     /// Set the maximum time allowed to find a move.
     ///
-    /// `None` means no time limit.
+    /// [`None`] means no time limit.
     ///
-    /// WARNING: If `None` is selected, and `max_depth` is also set to `None`,
-    /// the algorithm will not terminate unless all states have been searched,
-    /// which may take time exponential in the number of remaining move
-    /// combinations.
+    /// WARNING: If [`None`] is selected, and [`max_depth`](Self::max_depth) is also set to
+    /// [`None`], the algorithm will not terminate unless all states have been searched,
+    /// which may take time exponential in the number of remaining move combinations.
     pub fn max_time(mut self, time: Duration) -> Self {
         self.max_time = Some(time);
         self
@@ -101,7 +97,7 @@ impl<T: Mancala> MinimaxBuilder<T> {
         self
     }
 
-    /// Construct a `Minimax` instance based on the set configuration.
+    /// Construct a [`Minimax`] instance based on the set configuration.
     pub fn build(&self) -> Minimax<T> {
         Minimax {
             optimize_for: self.optimize_for,
@@ -116,10 +112,10 @@ impl<T: Mancala> MinimaxBuilder<T> {
 }
 
 impl<T: Mancala> Default for MinimaxBuilder<T> {
-    /// The default `Minimax` configuration is the following:
-    /// - `optimize_for`: `Player::One`
+    /// The default [`Minimax`] configuration is the following:
+    /// - `optimize_for`: [`Player::One`]
     /// - `max_depth`: `12`
-    /// - `iterative_deepening`: `false`
+    /// - `iterative_deepening`: [`false`]
     /// - `evaluator`: A function that returns the point differential between
     ///   the players (positive if the current player is winning).
     /// - `heuristic` Same as evaluator.
@@ -179,7 +175,7 @@ impl<T: Mancala> Minimax<T> {
     /// Search for the optimal move using the minimax algorithm and
     /// alpha-beta pruning, based on the set configuration parameters.
     ///
-    /// If no move was found successfully, returns `None`.
+    /// If no move was found successfully, returns [`None`].
     pub fn search(&self, state: &T) -> Option<Move> {
         self.start_time.set(Some(Instant::now()));
 
