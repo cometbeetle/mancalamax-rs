@@ -15,12 +15,36 @@ use std::fmt::{Display, Formatter};
 ///
 /// Implements the [`Mancala`] trait, and can be converted to and from
 /// [`DynGameState`] structs.
+///
+/// If the `serde` feature is enabled, this struct will be serializable and
+/// deserializable, via automatic conversion to and from [`DynGameState`].
 #[derive(Debug, Clone, Copy)]
 pub struct GameState<const N: usize> {
     board: [[usize; N]; 2],
     stores: [usize; 2],
     ply: usize,
     current_turn: Player,
+}
+
+#[cfg(feature = "serde")]
+impl<const N: usize> serde::Serialize for GameState<N> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serde::Serialize::serialize(&DynGameState::from(*self), serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'a, const N: usize> serde::Deserialize<'a> for GameState<N> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        let dyn_state = DynGameState::deserialize(deserializer)?;
+        Ok(GameState::from(dyn_state))
+    }
 }
 
 impl<const N: usize> Display for GameState<N> {

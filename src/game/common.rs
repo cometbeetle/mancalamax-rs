@@ -1,6 +1,6 @@
 //! Utility components used by Mancala game state structs.
 
-use super::mancala::{Mancala, Player};
+use super::mancala::{Mancala, Move, Player};
 use std::fmt::Formatter;
 
 /// Format a struct implementing the [`Mancala`] trait as necessary for
@@ -33,6 +33,24 @@ where
         write!(f, "{:02} ", pit)?;
     }
     writeln!(f, "]  ({:02})", state.stores()[1])?;
+
     writeln!(f, "Move Number: {}", state.ply())?;
+
+    write!(f, "Valid Moves: ")?;
+    let mut valid_moves = state.valid_moves();
+    let mut valid_str = String::new();
+    valid_moves.sort();
+    for m in valid_moves {
+        match m {
+            Move::Pit(n) => valid_str += format!("{}, ", n).as_str(),
+            Move::Swap => valid_str += "SWAP, ",
+        }
+    }
+    if !valid_str.is_empty() {
+        valid_str.truncate(valid_str.len() - 2);
+    } else {
+        valid_str = "None".to_string();
+    }
+    writeln!(f, "{}", valid_str)?;
     Ok(())
 }

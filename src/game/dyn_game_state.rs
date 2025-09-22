@@ -13,7 +13,11 @@ use std::fmt::{Display, Formatter};
 ///
 /// Implements the [`Mancala`] trait, and can be converted to and from
 /// [`GameState`] structs.
+///
+/// If the `serde` feature is enabled, this struct will be serializable and
+/// deserializable.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DynGameState {
     board: [Vec<usize>; 2],
     stores: [usize; 2],

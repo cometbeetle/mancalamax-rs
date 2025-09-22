@@ -1,5 +1,5 @@
-use mancalamax::game::GameState;
 use mancalamax::game::Player;
+use mancalamax::game::{DynGameState, GameState};
 use mancalamax::ui::{player_v_minimax_default, player_v_player_default};
 
 fn main() {

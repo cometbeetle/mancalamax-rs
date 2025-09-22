@@ -8,7 +8,8 @@ use std::ops::{Index, IndexMut};
 ///
 /// Can be converted to [`usize`], or used as an index, where [`One`][Self::One]
 /// is index 0, and [`Two`][Self::Two] is index 1.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Player {
     One,
     Two,
@@ -51,7 +52,8 @@ impl From<Player> for usize {
 ///
 /// If the [`Pit`][Self::Pit] variant is instantiated, it stores a [`usize`] value
 /// indicating which pit (starting from pit 1) is to be chosen.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Move {
     Pit(usize),
     Swap,
@@ -61,6 +63,7 @@ pub enum Move {
 ///
 /// During gameplay, there can either be a winner, a tie, or the game may still be ongoing.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum GameOutcome {
     Winner(Player),
     Tie,
