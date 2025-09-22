@@ -15,7 +15,7 @@ pub struct Minimax<T: Mancala> {
     start_time: Cell<Option<Instant>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct MinimaxBuilder<T: Mancala> {
     optimize_for: Player,
     max_depth: Option<usize>,

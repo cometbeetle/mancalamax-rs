@@ -27,10 +27,26 @@ impl<T> IndexMut<Player> for [T] {
     }
 }
 
+impl From<Player> for usize {
+    fn from(value: Player) -> Self {
+        match value {
+            Player::One => 1,
+            Player::Two => 2,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Move {
     Pit(usize),
     Swap,
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum GameOutcome {
+    Winner(Player),
+    Tie,
+    Ongoing,
 }
 
 pub(super) mod sealed {
@@ -65,6 +81,7 @@ pub trait Mancala: sealed::MancalaPrivate + Display {
             self.board()[1].as_ref().to_vec(),
         ]
     }
+
     fn is_over(&self) -> bool {
         for player in 0..2 {
             for pit in self.board()[player].as_ref() {
@@ -75,13 +92,30 @@ pub trait Mancala: sealed::MancalaPrivate + Display {
         }
         true
     }
+
     fn score(&self, player: Player) -> isize {
         self.stores()[player] as isize
     }
+
+    fn outcome(&self) -> GameOutcome {
+        if self.is_over() {
+            if self.score(Player::One) > self.score(Player::Two) {
+                GameOutcome::Winner(Player::One)
+            } else if self.score(Player::Two) > self.score(Player::One) {
+                GameOutcome::Winner(Player::Two)
+            } else {
+                GameOutcome::Tie
+            }
+        } else {
+            GameOutcome::Ongoing
+        }
+    }
+
     fn swap_allowed(&self) -> bool {
         // TODO: Technically, this doesn't cover all cases where swap is allowed.
         self.current_turn() == Player::Two && self.ply() == 2
     }
+
     fn valid_moves(&self) -> Vec<Move> {
         let mut moves = Vec::new();
 
@@ -103,6 +137,7 @@ pub trait Mancala: sealed::MancalaPrivate + Display {
 
         moves
     }
+
     fn make_move(&self, selection: Move) -> Option<Self> {
         // Make a copy of the current state.
         let mut new_state = self.clone();
@@ -222,15 +257,19 @@ pub trait Mancala: sealed::MancalaPrivate + Display {
 
         Some(new_state)
     }
+
     fn make_move_pit(&self, pit: usize) -> Option<Self> {
         self.make_move(Move::Pit(pit))
     }
+
     fn make_move_swap(&self) -> Option<Self> {
         self.make_move(Move::Swap)
     }
+
     fn pits(&self) -> usize {
         self.board()[0].as_ref().len()
     }
+
     fn board(&self) -> &[Self::Board; 2];
     fn stores(&self) -> &[usize; 2];
     fn ply(&self) -> usize;
