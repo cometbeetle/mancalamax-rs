@@ -1,4 +1,4 @@
-//! The `mancalamax_rs` crate provides several structs, enums, and traits
+//! The `mancalamax` crate provides several structs, enums, and traits
 //! necessary to play Mancala using a computer.
 //!
 //! `[DOCS IN PROGRESS]`

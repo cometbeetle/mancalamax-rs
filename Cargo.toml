@@ -1,5 +1,5 @@
 [package]
-name = "mancalamax-rs"
+name = "mancalamax"
 version = "0.1.0"
 edition = "2024"
 
