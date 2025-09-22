@@ -1,3 +1,5 @@
+//! Components of the user interface system.
+
 pub mod gui;
 pub mod terminal;
 

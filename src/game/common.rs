@@ -1,6 +1,11 @@
+//! Utility components used by Mancala game state structs.
+
 use super::mancala::{Mancala, Player};
 use std::fmt::Formatter;
 
+/// Format a struct implementing the `Mancala` trait as necessary for
+/// the `Display` trait. Assists with printing to standard output without
+/// excessive code duplication for both `GameState` and `DynGameState`.
 pub(super) fn fmt_common<T>(f: &mut Formatter, state: &T, title: &str) -> std::fmt::Result
 where
     T: Mancala,

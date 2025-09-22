@@ -1,9 +1,20 @@
-use crate::game::{GameState, Mancala, Move, Player};
+//! Components relating to the use of the minimax algorithm with Mancala
+//! board states.
+
+use crate::game::{Mancala, Move, Player};
 use std::cell::Cell;
 use std::time::{Duration, Instant};
 
+/// Type alias for any function that evaluates a reference to a type
+/// (usually some kind of Mancala game state) and a current player,
+/// and produces a `f32` value indicating some level of utility.
+/// Positive values indicate higher utility.
 pub type StateEvalFn<T> = fn(&T, player: Player) -> f32;
 
+/// The `Minimax` struct stores the necessary information for executing the
+/// minimax algorithm on a Mancala board state in order to determine the
+/// most optimal move (i.e., the one that maximizes utility, or is calculated
+/// as best based on some heuristic).
 #[derive(Debug, Clone)]
 pub struct Minimax<T: Mancala> {
     optimize_for: Player,
@@ -15,6 +26,8 @@ pub struct Minimax<T: Mancala> {
     start_time: Cell<Option<Instant>>,
 }
 
+/// The `MinimaxBuilder` struct acts as a helper for constructing `Minimax`
+/// instances based on certain specifications.
 #[derive(Debug, Clone, Copy)]
 pub struct MinimaxBuilder<T: Mancala> {
     optimize_for: Player,
@@ -26,33 +39,69 @@ pub struct MinimaxBuilder<T: Mancala> {
 }
 
 impl<T: Mancala> MinimaxBuilder<T> {
+    /// Construct a new `MinimaxBuilder` instance using the default configuration.
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// Set the player for which minimax should optimize the outcome.
     pub fn optimize_for(mut self, p: Player) -> Self {
         self.optimize_for = p;
         self
     }
+
+    /// Set the maximum search depth.
+    ///
+    /// `None` means no search depth limit.
+    ///
+    /// WARNING: If `None` is selected, and `max_time` is also set to `None`,
+    /// the algorithm will not terminate unless all states have been searched,
+    /// which may take time exponential in the number of remaining move
+    /// combinations.
     pub fn max_depth(mut self, depth: Option<usize>) -> Self {
         self.max_depth = depth;
         self
     }
+
+    /// Set the maximum time allowed to find a move.
+    ///
+    /// `None` means no time limit.
+    ///
+    /// WARNING: If `None` is selected, and `max_depth` is also set to `None`,
+    /// the algorithm will not terminate unless all states have been searched,
+    /// which may take time exponential in the number of remaining move
+    /// combinations.
     pub fn max_time(mut self, time: Duration) -> Self {
         self.max_time = Some(time);
         self
     }
+
+    /// Set whether to use iterative deepening as a search strategy.
     pub fn iterative_deepening(mut self, iterative: bool) -> Self {
         self.iterative_deepening = iterative;
         self
     }
+
+    /// Set the evaluator function.
+    ///
+    /// This function is used to evaluate states only when it is a terminal state
+    /// (i.e., when the game is over).
     pub fn evaluator(mut self, e: StateEvalFn<T>) -> Self {
         self.evaluator = e;
         self
     }
+
+    /// Set the heuristic function.
+    ///
+    /// This function is used to evaluate states only when the artificial limit
+    /// (i.e., the time / depth limit) has been reached, and may be different
+    /// from the evaluator function.
     pub fn heuristic(mut self, h: StateEvalFn<T>) -> Self {
         self.heuristic = h;
         self
     }
+
+    /// Construct a `Minimax` instance based on the set configuration.
     pub fn build(&self) -> Minimax<T> {
         Minimax {
             optimize_for: self.optimize_for,
@@ -67,6 +116,13 @@ impl<T: Mancala> MinimaxBuilder<T> {
 }
 
 impl<T: Mancala> Default for MinimaxBuilder<T> {
+    /// The default `Minimax` configuration is the following:
+    /// - `optimize_for`: `Player::One`
+    /// - `max_depth`: `12`
+    /// - `iterative_deepening`: `false`
+    /// - `evaluator`: A function that returns the point differential between
+    ///   the players (positive if the current player is winning).
+    /// - `heuristic` Same as evaluator.
     fn default() -> Self {
         let evaluator = |s: &T, p: Player| match p {
             Player::One => (s.score(Player::One) - s.score(Player::Two)) as f32,
@@ -85,28 +141,45 @@ impl<T: Mancala> Default for MinimaxBuilder<T> {
 }
 
 impl<T: Mancala> Minimax<T> {
+    /// Returns the player for which minimax will optimize the outcome.
     pub fn optimize_for(&self) -> Player {
         self.optimize_for
     }
+
+    /// Returns the set maximum search depth.
     pub fn max_depth(&self) -> Option<usize> {
         self.max_depth
     }
+
+    /// Returns the set maximum search time.
     pub fn max_time(&self) -> Option<Duration> {
         self.max_time
     }
+
+    /// Returns whether iterative deepening is being used.
     pub fn iterative_deepening(&self) -> bool {
         self.iterative_deepening
     }
+
+    /// Returns the start time (if currently running) of the algorithm.
     pub fn start_time(&self) -> Option<Instant> {
         self.start_time.get()
     }
+
+    /// Calls the evaluation function on a given state.
     pub fn call_evaluator(&self, state: &T) -> f32 {
         (self.evaluator)(state, self.optimize_for)
     }
+
+    /// Calls the heuristic function on a given state.
     pub fn call_heuristic(&self, state: &T) -> f32 {
         (self.heuristic)(state, self.optimize_for)
     }
 
+    /// Search for the optimal move using the minimax algorithm and
+    /// alpha-beta pruning, based on the set configuration parameters.
+    ///
+    /// If no move was found successfully, returns `None`.
     pub fn search(&self, state: &T) -> Option<Move> {
         self.start_time.set(Some(Instant::now()));
 
@@ -118,6 +191,9 @@ impl<T: Mancala> Minimax<T> {
         best_move
     }
 
+    /// Determines whether the algorithm has been running longer than requested.
+    ///
+    /// Used internally inside `max_value` and `min_value`.
     fn time_exceeded(&self) -> bool {
         match (self.start_time(), self.max_time) {
             (Some(start), Some(max)) => Instant::now() - start >= max,
@@ -125,6 +201,8 @@ impl<T: Mancala> Minimax<T> {
         }
     }
 
+    /// Maximize the utility / heuristic for a given state, and return the
+    /// (move, utility) pair that does so.
     fn max_value(&self, state: &T, alpha: f32, beta: f32, depth: usize) -> (Option<Move>, f32) {
         assert_ne!(
             self.start_time.get(),
@@ -170,6 +248,8 @@ impl<T: Mancala> Minimax<T> {
         (best_move, v)
     }
 
+    /// Minimize the utility / heuristic for a given state, and return the
+    /// (move, utility) pair that does so.
     fn min_value(&self, state: &T, alpha: f32, beta: f32, depth: usize) -> (Option<Move>, f32) {
         assert_ne!(
             self.start_time(),

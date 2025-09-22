@@ -1,6 +1,13 @@
+//! Traits and enums necessary for Mancala gameplay.
+
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
 
+/// Mancala games have two players. Therefore, the `Player` enum can be one
+/// of two variants, `One`, or `Two`.
+///
+/// Can be converted to `usize`, or used as an index, where `One` is index
+/// 0, and `Two` is index 1.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Player {
     One,
@@ -36,12 +43,22 @@ impl From<Player> for usize {
     }
 }
 
+/// The `Move` enum represents one of the two types of move during
+/// Mancala gameplay. Players can either select a pit from which to
+/// distribute stones, or, under certain circumstances at the beginning
+/// of the game, the second player can swap the board.
+///
+/// If the `Pit` variant is instantiated, it stores a `usize` value
+/// indicating which pit (starting from pit 1) is to be chosen.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Move {
     Pit(usize),
     Swap,
 }
 
+/// The `GameOutcome` enum is used to describe the current outcome of a
+/// game state. During gameplay, there can either be a winner, a tie, or
+/// the game may still be ongoing.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum GameOutcome {
     Winner(Player),
@@ -49,32 +66,16 @@ pub enum GameOutcome {
     Ongoing,
 }
 
-pub(super) mod sealed {
-    use super::Player;
+/// The `Mancala` trait provides a default implementation of Mancala gameplay
+/// for all implementors. It also specifies certain accessor and mutable reference
+/// methods that must be implemented on a per-type basis (i.e., no default
+/// implementation can be provided).
+pub trait Mancala: Clone + Display {
+    /// Used to indicate the underlying array-like type used to store
+    /// the board contents for each player.
+    type Board: AsRef<[usize]> + AsMut<[usize]>;
 
-    pub trait MancalaPrivate: Clone {
-        type Board: AsRef<[usize]> + AsMut<[usize]>;
-        fn switch_turn(&mut self) -> Player {
-            let turn = *self.current_turn_mut();
-            *self.current_turn_mut() = if turn == Player::One {
-                Player::Two
-            } else {
-                Player::One
-            };
-            *self.current_turn_mut()
-        }
-        fn rotate_board(&mut self) {
-            self.board_mut().swap(0, 1);
-            self.stores_mut().swap(0, 1);
-        }
-        fn board_mut(&mut self) -> &mut [Self::Board; 2];
-        fn stores_mut(&mut self) -> &mut [usize; 2];
-        fn ply_mut(&mut self) -> &mut usize;
-        fn current_turn_mut(&mut self) -> &mut Player;
-    }
-}
-
-pub trait Mancala: sealed::MancalaPrivate + Display {
+    /// Converts the current board into an array of two `Vec` instances for easy access.
     fn board_as_vecs(&self) -> [Vec<usize>; 2] {
         [
             self.board()[0].as_ref().to_vec(),
@@ -82,6 +83,7 @@ pub trait Mancala: sealed::MancalaPrivate + Display {
         ]
     }
 
+    /// Determines whether the game is over.
     fn is_over(&self) -> bool {
         for player in 0..2 {
             for pit in self.board()[player].as_ref() {
@@ -93,10 +95,12 @@ pub trait Mancala: sealed::MancalaPrivate + Display {
         true
     }
 
+    /// Gets the current score for a player.
     fn score(&self, player: Player) -> isize {
         self.stores()[player] as isize
     }
 
+    /// Determines the current outcome of the game.
     fn outcome(&self) -> GameOutcome {
         if self.is_over() {
             if self.score(Player::One) > self.score(Player::Two) {
@@ -111,11 +115,15 @@ pub trait Mancala: sealed::MancalaPrivate + Display {
         }
     }
 
+    /// Determines whether the swap move is currently allowed.
+    ///
+    /// `[WORK IN PROGRESS]`
     fn swap_allowed(&self) -> bool {
         // TODO: Technically, this doesn't cover all cases where swap is allowed.
         self.current_turn() == Player::Two && self.ply() == 2
     }
 
+    /// Returns a vector of moves that are currently valid for the current player.
     fn valid_moves(&self) -> Vec<Move> {
         let mut moves = Vec::new();
 
@@ -138,6 +146,28 @@ pub trait Mancala: sealed::MancalaPrivate + Display {
         moves
     }
 
+    /// Switches the current turn. Used inside `make_move`.
+    fn switch_turn(&mut self) -> Player {
+        let turn = *self.current_turn_mut();
+        *self.current_turn_mut() = if turn == Player::One {
+            Player::Two
+        } else {
+            Player::One
+        };
+        *self.current_turn_mut()
+    }
+
+    /// Rotates the board. Used inside `make_move` when the swap move is requested.
+    fn rotate_board(&mut self) {
+        self.board_mut().swap(0, 1);
+        self.stores_mut().swap(0, 1);
+    }
+
+    /// Returns a new board state, updated to reflect the result of making
+    /// the specified move. If the move was invalid, returns `None`.
+    ///
+    /// The default implementation of `make_move` roughly follows the gameplay
+    /// rules of the "Kalah" variant of Mancala.
     fn make_move(&self, selection: Move) -> Option<Self> {
         // Make a copy of the current state.
         let mut new_state = self.clone();
@@ -258,20 +288,45 @@ pub trait Mancala: sealed::MancalaPrivate + Display {
         Some(new_state)
     }
 
+    /// Helper method to select a pit move without the encapsulating enum.
     fn make_move_pit(&self, pit: usize) -> Option<Self> {
         self.make_move(Move::Pit(pit))
     }
 
+    /// Helper method to select the swap move without the encapsulating enum.
     fn make_move_swap(&self) -> Option<Self> {
         self.make_move(Move::Swap)
     }
 
+    /// Returns the number of pits per player for the current game.
     fn pits(&self) -> usize {
         self.board()[0].as_ref().len()
     }
 
+    /// Provides immutable access to the board.
     fn board(&self) -> &[Self::Board; 2];
+
+    /// Provides immutable access to the stores.
     fn stores(&self) -> &[usize; 2];
+
+    /// Returns the current ply.
     fn ply(&self) -> usize;
+
+    /// Returns the player currently allowed to move.
     fn current_turn(&self) -> Player;
+
+    /// Provides mutable access to the board.
+    ///
+    /// NOTE: If used incorrectly, this method can lead to errors if the
+    /// board is put into an improper state.
+    fn board_mut(&mut self) -> &mut [Self::Board; 2];
+
+    /// Provides mutable access to the stores.
+    fn stores_mut(&mut self) -> &mut [usize; 2];
+
+    /// Provides mutable access to the current ply variable.
+    fn ply_mut(&mut self) -> &mut usize;
+
+    /// Provides mutable access to the current turn variable.
+    fn current_turn_mut(&mut self) -> &mut Player;
 }

@@ -1,9 +1,19 @@
 use super::common::fmt_common;
 use super::dyn_game_state::DynGameState;
-use super::mancala::sealed::MancalaPrivate;
 use super::mancala::{Mancala, Player};
 use std::fmt::{Display, Formatter};
 
+/// The `GameState` struct stores the necessary components of a Mancala
+/// game, including the board, each player's store, the current ply, and
+/// the player currently allowed to move. `GameState` uses a statically
+/// sized board for use in scenarios where the desired board size
+/// is known at compile time. This provides higher performance than
+/// `DynGameState`, especially in scenarios where repeated state
+/// creation / modification is necessary (i.e., during the execution
+/// of the minimax algorithm).
+///
+/// It implements the `Mancala` trait, and can be converted to and from
+/// `DynGameState` structs.
 #[derive(Debug, Clone, Copy)]
 pub struct GameState<const N: usize> {
     board: [[usize; N]; 2],
@@ -29,23 +39,9 @@ impl Default for GameState<6> {
     }
 }
 
-impl<const N: usize> MancalaPrivate for GameState<N> {
-    type Board = [usize; N];
-    fn board_mut(&mut self) -> &mut [Self::Board; 2] {
-        &mut self.board
-    }
-    fn stores_mut(&mut self) -> &mut [usize; 2] {
-        &mut self.stores
-    }
-    fn ply_mut(&mut self) -> &mut usize {
-        &mut self.ply
-    }
-    fn current_turn_mut(&mut self) -> &mut Player {
-        &mut self.current_turn
-    }
-}
-
 impl<const N: usize> Mancala for GameState<N> {
+    type Board = [usize; N];
+
     fn board(&self) -> &[Self::Board; 2] {
         &self.board
     }
@@ -61,10 +57,42 @@ impl<const N: usize> Mancala for GameState<N> {
     fn current_turn(&self) -> Player {
         self.current_turn
     }
+
+    fn board_mut(&mut self) -> &mut [Self::Board; 2] {
+        &mut self.board
+    }
+
+    fn stores_mut(&mut self) -> &mut [usize; 2] {
+        &mut self.stores
+    }
+
+    fn ply_mut(&mut self) -> &mut usize {
+        &mut self.ply
+    }
+
+    fn current_turn_mut(&mut self) -> &mut Player {
+        &mut self.current_turn
+    }
 }
 
 impl<const N: usize> From<DynGameState> for GameState<N> {
     fn from(value: DynGameState) -> Self {
+        assert_eq!(
+            value.board().len(),
+            2,
+            "Failed to convert DynGameState to GameState due to invalid dynamic board \
+            (got Vec of length {}, expected 2)",
+            value.board().len()
+        );
+        assert!(
+            value.board()[0].len() == N && value.board()[1].len() == N,
+            "Failed to convert DynGameState to GameState due to invalid dynamic board \
+            (board[0] had length {}, board[1] had length {}; expected \
+            {} for both)",
+            value.board()[0].len(),
+            value.board()[1].len(),
+            N
+        );
         let mut board = [[0; N]; 2];
         for i in 0..2 {
             for j in 0..N {
@@ -81,6 +109,8 @@ impl<const N: usize> From<DynGameState> for GameState<N> {
 }
 
 impl<const N: usize> GameState<N> {
+    /// Create a new `GameState` based on a series of parameters used
+    /// to construct a starting game of Mancala.
     pub fn new(
         stones_per: usize,
         store_1: usize,
@@ -95,6 +125,14 @@ impl<const N: usize> GameState<N> {
             current_turn,
         }
     }
+
+    /// Create a new `GameState` based on a preexisting board, stored as a
+    /// `Vec` of `Vec` structs. The input vector must have an effective shape
+    /// of `(2, N)`, where `N` is the number of pits per player.
+    ///
+    /// Note that because the size of `Vec` structs is not known at compile time,
+    /// the board length `N` must be specified correctly in the generic call to
+    /// `GameState::from_vec`.
     pub fn from_vec(
         board: &Vec<Vec<usize>>,
         store_1: usize,
@@ -131,6 +169,8 @@ impl<const N: usize> GameState<N> {
             current_turn,
         }
     }
+
+    /// Create a new `GameState` based on a preexisting board array.
     pub fn from_arr(
         board: [[usize; N]; 2],
         store_1: usize,

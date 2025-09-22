@@ -1,3 +1,5 @@
+//! Components of the Mancala gameplay system.
+
 mod common;
 pub mod dyn_game_state;
 pub mod game_state;

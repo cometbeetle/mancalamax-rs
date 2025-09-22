@@ -1,9 +1,18 @@
+//! Definitions and implementations for dynamically sized Mancala game states.
+
 use super::common::fmt_common;
 use super::game_state::GameState;
-use super::mancala::sealed::MancalaPrivate;
 use super::mancala::{Mancala, Player};
 use std::fmt::{Display, Formatter};
 
+/// The `DynGameState` struct stores the necessary components of a Mancala
+/// game, including the board, each player's store, the current ply, and
+/// the player currently allowed to move. `DynGameState` uses a dynamically
+/// sized board for use in scenarios where the desired board size
+/// is not known at compile time.
+///
+/// It implements the `Mancala` trait, and can be converted to and from
+/// `GameState` structs.
 #[derive(Debug, Clone)]
 pub struct DynGameState {
     board: [Vec<usize>; 2],
@@ -29,24 +38,9 @@ impl Default for DynGameState {
     }
 }
 
-impl MancalaPrivate for DynGameState {
+impl Mancala for DynGameState {
     type Board = Vec<usize>;
 
-    fn board_mut(&mut self) -> &mut [Self::Board; 2] {
-        &mut self.board
-    }
-    fn stores_mut(&mut self) -> &mut [usize; 2] {
-        &mut self.stores
-    }
-    fn ply_mut(&mut self) -> &mut usize {
-        &mut self.ply
-    }
-    fn current_turn_mut(&mut self) -> &mut Player {
-        &mut self.current_turn
-    }
-}
-
-impl Mancala for DynGameState {
     fn board(&self) -> &[Self::Board; 2] {
         &self.board
     }
@@ -62,6 +56,22 @@ impl Mancala for DynGameState {
     fn current_turn(&self) -> Player {
         self.current_turn
     }
+
+    fn board_mut(&mut self) -> &mut [Self::Board; 2] {
+        &mut self.board
+    }
+
+    fn stores_mut(&mut self) -> &mut [usize; 2] {
+        &mut self.stores
+    }
+
+    fn ply_mut(&mut self) -> &mut usize {
+        &mut self.ply
+    }
+
+    fn current_turn_mut(&mut self) -> &mut Player {
+        &mut self.current_turn
+    }
 }
 
 impl<const N: usize> From<GameState<N>> for DynGameState {
@@ -76,6 +86,8 @@ impl<const N: usize> From<GameState<N>> for DynGameState {
 }
 
 impl DynGameState {
+    /// Create a new `DynGameState` based on a series of parameters used
+    /// to construct a starting game of Mancala.
     pub fn new(
         pits: usize,
         stones_per: usize,
@@ -91,6 +103,10 @@ impl DynGameState {
             current_turn,
         }
     }
+
+    /// Create a new `DynGameState` based on a preexisting board, stored as a
+    /// `Vec` of `Vec` structs. The input vector must have an effective shape
+    /// of `(2, N)`, where `N` is the number of pits per player.
     pub fn from_vec(
         board: &Vec<Vec<usize>>,
         store_1: usize,
@@ -121,6 +137,8 @@ impl DynGameState {
             current_turn,
         }
     }
+
+    /// Create a new `DynGameState` based on a preexisting board array.
     pub fn from_arr<const N: usize>(
         board: [[usize; N]; 2],
         store_1: usize,
