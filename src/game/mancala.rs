@@ -175,8 +175,8 @@ pub trait Mancala: Clone + Display {
         // Make a copy of the current state.
         let mut new_state = self.clone();
 
-        // Handle swap inputs.
         let mut pit = match selection {
+            // Handle swap inputs.
             Move::Swap => {
                 if !new_state.swap_allowed() {
                     return None;
@@ -203,6 +203,11 @@ pub trait Mancala: Clone + Display {
             stones
         };
 
+        // Ensure selected pit had stones in it.
+        if stones == 0 {
+            return None;
+        }
+
         // Initialize turn variables.
         let mut go_again = false;
 
@@ -219,7 +224,7 @@ pub trait Mancala: Clone + Display {
                 let add_to_store = side == self.current_turn();
                 if add_to_store {
                     new_state.stores_mut()[side] += 1;
-                    go_again = if last_stone { true } else { false }
+                    go_again = last_stone;
                 }
 
                 // Switch board sides.
@@ -230,9 +235,9 @@ pub trait Mancala: Clone + Display {
                 };
                 pit = 0;
 
-                // If we did not add to the store, make sure to add one to the next player's store.
+                // If we did not add to the store, make sure to add one to the next player's pit.
                 // If we DID add to the store, and if that wasn't the last stone, add one to the
-                // next player's store, and increment i to avoid adding two stones for the same i.
+                // next player's pit, and increment i to avoid adding two stones for the same i.
                 if !add_to_store {
                     new_state.board_mut()[side].as_mut()[pit] += 1;
                 } else if !last_stone {
