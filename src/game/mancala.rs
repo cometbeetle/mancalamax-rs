@@ -132,7 +132,7 @@ pub trait Mancala: Clone + Display {
 
         // If the Swap move is available for player 2.
         if self.swap_allowed() {
-            moves.insert(0, Move::Swap);
+            moves.push(Move::Swap);
         }
 
         // List all pits where the number of stones > 0.
@@ -142,7 +142,7 @@ pub trait Mancala: Clone + Display {
             .enumerate()
         {
             if *pit > 0 {
-                moves.insert(0, Move::Pit(i + 1));
+                moves.push(Move::Pit(i + 1));
             }
         }
 

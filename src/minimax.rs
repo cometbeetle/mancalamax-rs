@@ -3,6 +3,7 @@
 
 use crate::game::{Mancala, Move, Player};
 use std::cell::Cell;
+use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 /// Type alias for any function that evaluates a reference to a type
@@ -10,6 +11,12 @@ use std::time::{Duration, Instant};
 /// and produces a [`f32`] value indicating some level of utility.
 /// Positive values indicate higher utility.
 pub type StateEvalFn<T> = fn(&T, player: Player) -> f32;
+
+/// Type alias for any function that evaluates a reference to a type
+/// (usually some kind of Mancala game state) and produces a vector
+/// of moves in a specific order. Every move in the vector should
+/// be a valid move, given the supplied game state reference.
+pub type MoveOrderFn<T> = fn(&T) -> Vec<Move>;
 
 /// Stores the necessary information for executing the minimax algorithm on a
 /// Mancala board state in order to determine the most optimal move (i.e.,
@@ -20,6 +27,7 @@ pub struct Minimax<T: Mancala> {
     max_depth: Option<usize>,
     max_time: Option<Duration>,
     iterative_deepening: bool,
+    move_orderer: MoveOrderFn<T>,
     evaluator: StateEvalFn<T>,
     heuristic: StateEvalFn<T>,
     start_time: Cell<Option<Instant>>,
@@ -32,6 +40,7 @@ pub struct MinimaxBuilder<T: Mancala> {
     max_depth: Option<usize>,
     max_time: Option<Duration>,
     iterative_deepening: bool,
+    move_orderer: MoveOrderFn<T>,
     evaluator: StateEvalFn<T>,
     heuristic: StateEvalFn<T>,
 }
@@ -78,6 +87,16 @@ impl<T: Mancala> MinimaxBuilder<T> {
         self
     }
 
+    /// Set the move ordering function.
+    ///
+    /// This function is used for each state checked by minimax, and
+    /// should be designed to supply moves in an optimal order (i.e., one
+    /// which avoids excessive future computation).
+    pub fn move_orderer(mut self, o: MoveOrderFn<T>) -> Self {
+        self.move_orderer = o;
+        self
+    }
+
     /// Set the evaluator function.
     ///
     /// This function is used to evaluate states only when it is a terminal state
@@ -104,6 +123,7 @@ impl<T: Mancala> MinimaxBuilder<T> {
             max_depth: self.max_depth,
             max_time: self.max_time,
             iterative_deepening: self.iterative_deepening,
+            move_orderer: self.move_orderer,
             evaluator: self.evaluator,
             heuristic: self.heuristic,
             start_time: None.into(),
@@ -116,10 +136,28 @@ impl<T: Mancala> Default for MinimaxBuilder<T> {
     /// - `optimize_for`: [`Player::One`]
     /// - `max_depth`: `12`
     /// - `iterative_deepening`: [`false`]
+    /// - `move_orderer`: Returns the valid moves in descending order by pit number.
     /// - `evaluator`: A function that returns the point differential between
     ///   the players (positive if the current player is winning).
     /// - `heuristic` Same as evaluator.
     fn default() -> Self {
+        // Faster than sorting s.valid_moves() at each iteration.
+        let move_orderer = |s: &T| {
+            let mut moves = Vec::new();
+            if s.swap_allowed() {
+                moves.insert(0, Move::Swap);
+            }
+            for (i, pit) in s.board()[s.current_turn()]
+              .as_ref()
+              .iter()
+              .enumerate()
+            {
+                if *pit > 0 {
+                    moves.insert(0, Move::Pit(i + 1));
+                }
+            }
+            moves
+        };
         let evaluator = |s: &T, p: Player| match p {
             Player::One => (s.score(Player::One) - s.score(Player::Two)) as f32,
             Player::Two => (s.score(Player::Two) - s.score(Player::One)) as f32,
@@ -130,6 +168,7 @@ impl<T: Mancala> Default for MinimaxBuilder<T> {
             max_depth: Some(12),
             max_time: None,
             iterative_deepening: false,
+            move_orderer,
             evaluator,
             heuristic,
         }
@@ -162,13 +201,18 @@ impl<T: Mancala> Minimax<T> {
         self.start_time.get()
     }
 
+    /// Calls the move ordering function on a given state.
+    pub fn order_moves(&self, state: &T) -> Vec<Move> {
+        (self.move_orderer)(state)
+    }
+
     /// Calls the evaluation function on a given state.
-    pub fn call_evaluator(&self, state: &T) -> f32 {
+    pub fn evaluate(&self, state: &T) -> f32 {
         (self.evaluator)(state, self.optimize_for)
     }
 
     /// Calls the heuristic function on a given state.
-    pub fn call_heuristic(&self, state: &T) -> f32 {
+    pub fn get_heuristic(&self, state: &T) -> f32 {
         (self.heuristic)(state, self.optimize_for)
     }
 
@@ -208,12 +252,12 @@ impl<T: Mancala> Minimax<T> {
 
         // If we are in a terminal state, evaluate utility.
         if state.is_over() {
-            return (None, self.call_evaluator(state));
+            return (None, self.evaluate(state));
         }
 
         // If we have reached the artificial limit, use the heuristic.
         if self.max_depth.is_some_and(|d| depth >= d) || self.time_exceeded() {
-            return (None, self.call_heuristic(state));
+            return (None, self.get_heuristic(state));
         }
 
         let depth = depth + 1;
@@ -221,7 +265,7 @@ impl<T: Mancala> Minimax<T> {
         let mut v = f32::NEG_INFINITY;
         let mut best_move: Option<Move> = None;
 
-        for m in state.valid_moves() {
+        for m in self.order_moves(state) {
             let new_state = state.make_move(m).unwrap();
             let (_, v2) = if new_state.current_turn() == state.current_turn() {
                 self.max_value(&new_state, alpha, beta, depth)
@@ -255,12 +299,12 @@ impl<T: Mancala> Minimax<T> {
 
         // If we are in a terminal state, evaluate utility.
         if state.is_over() {
-            return (None, self.call_evaluator(state));
+            return (None, self.evaluate(state));
         }
 
         // If we have reached the artificial limit, use the heuristic.
         if self.max_depth.is_some_and(|d| depth >= d) || self.time_exceeded() {
-            return (None, self.call_heuristic(state));
+            return (None, self.get_heuristic(state));
         }
 
         let depth = depth + 1;
@@ -268,7 +312,7 @@ impl<T: Mancala> Minimax<T> {
         let mut v = f32::INFINITY;
         let mut best_move: Option<Move> = None;
 
-        for m in state.valid_moves() {
+        for m in self.order_moves(state) {
             let new_state = state.make_move(m).unwrap();
             let (_, v2) = if new_state.current_turn() == state.current_turn() {
                 self.min_value(&new_state, alpha, beta, depth)
