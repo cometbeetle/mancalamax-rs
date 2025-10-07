@@ -1,11 +1,10 @@
 //! Components for the graphical user interface.
 
 use bevy::prelude::*;
-use bevy::sprite::{Wireframe2dConfig, Wireframe2dPlugin};
 
 pub fn make_gui() {
     let mut app = App::new();
-    app.add_plugins((DefaultPlugins, Wireframe2dPlugin::default()))
+    app.add_plugins(DefaultPlugins)
         .add_systems(Startup, setup);
     app.add_systems(Update, toggle_wireframe);
     app.run();
@@ -51,13 +50,12 @@ fn setup(
 }
 
 fn toggle_wireframe(
-    mut wireframe_config: ResMut<Wireframe2dConfig>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     window: Single<&Window, With<bevy::window::PrimaryWindow>>,
 ) {
     if keyboard.just_pressed(KeyCode::Space) {
-        wireframe_config.global = !wireframe_config.global;
+       println!("toggle_wireframe");
     }
     if mouse.just_pressed(MouseButton::Left) {
         if let Some(position) = window.cursor_position() {
