@@ -147,11 +147,7 @@ impl<T: Mancala> Default for MinimaxBuilder<T> {
             if s.swap_allowed() {
                 moves.insert(0, Move::Swap);
             }
-            for (i, pit) in s.board()[s.current_turn()]
-              .as_ref()
-              .iter()
-              .enumerate()
-            {
+            for (i, pit) in s.board()[s.current_turn()].as_ref().iter().enumerate() {
                 if *pit > 0 {
                     moves.insert(0, Move::Pit(i + 1));
                 }
