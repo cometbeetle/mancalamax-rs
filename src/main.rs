@@ -1,5 +1,5 @@
 use mancalamax::game::{DynGameState, GameState};
-use mancalamax::game::{Mancala, Player, Move};
+use mancalamax::game::{Mancala, Move, Player};
 use mancalamax::minimax::MinimaxBuilder;
 use mancalamax::ui::{player_v_minimax, player_v_minimax_default, player_v_player_default};
 
