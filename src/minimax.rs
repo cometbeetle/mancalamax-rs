@@ -3,7 +3,6 @@
 
 use crate::game::{Mancala, Move, Player};
 use std::cell::Cell;
-use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 /// Type alias for any function that evaluates a reference to a type
@@ -26,7 +25,6 @@ pub struct Minimax<T: Mancala> {
     optimize_for: Player,
     max_depth: Option<usize>,
     max_time: Option<Duration>,
-    iterative_deepening: bool,
     move_orderer: MoveOrderFn<T>,
     evaluator: StateEvalFn<T>,
     heuristic: StateEvalFn<T>,
@@ -39,7 +37,6 @@ pub struct MinimaxBuilder<T: Mancala> {
     optimize_for: Player,
     max_depth: Option<usize>,
     max_time: Option<Duration>,
-    iterative_deepening: bool,
     move_orderer: MoveOrderFn<T>,
     evaluator: StateEvalFn<T>,
     heuristic: StateEvalFn<T>,
@@ -81,12 +78,6 @@ impl<T: Mancala> MinimaxBuilder<T> {
         self
     }
 
-    /// Set whether to use iterative deepening as a search strategy.
-    pub fn iterative_deepening(mut self, iterative: bool) -> Self {
-        self.iterative_deepening = iterative;
-        self
-    }
-
     /// Set the move ordering function.
     ///
     /// This function is used for each state checked by minimax, and
@@ -122,7 +113,6 @@ impl<T: Mancala> MinimaxBuilder<T> {
             optimize_for: self.optimize_for,
             max_depth: self.max_depth,
             max_time: self.max_time,
-            iterative_deepening: self.iterative_deepening,
             move_orderer: self.move_orderer,
             evaluator: self.evaluator,
             heuristic: self.heuristic,
@@ -135,7 +125,6 @@ impl<T: Mancala> Default for MinimaxBuilder<T> {
     /// The default [`Minimax`] configuration is the following:
     /// - `optimize_for`: [`Player::One`]
     /// - `max_depth`: `12`
-    /// - `iterative_deepening`: [`false`]
     /// - `move_orderer`: Returns the valid moves in descending order by pit number.
     /// - `evaluator`: A function that returns the point differential between
     ///   the players (positive if the current player is winning).
@@ -163,7 +152,6 @@ impl<T: Mancala> Default for MinimaxBuilder<T> {
             optimize_for: Player::One,
             max_depth: Some(12),
             max_time: None,
-            iterative_deepening: false,
             move_orderer,
             evaluator,
             heuristic,
@@ -185,11 +173,6 @@ impl<T: Mancala> Minimax<T> {
     /// Returns the set maximum search time.
     pub fn max_time(&self) -> Option<Duration> {
         self.max_time
-    }
-
-    /// Returns whether iterative deepening is being used.
-    pub fn iterative_deepening(&self) -> bool {
-        self.iterative_deepening
     }
 
     /// Returns the start time (if currently running) of the algorithm.
@@ -215,16 +198,28 @@ impl<T: Mancala> Minimax<T> {
     /// Search for the optimal move using the minimax algorithm and
     /// alpha-beta pruning, based on the set configuration parameters.
     ///
+    /// Returns a pair of (move, utility).
+    ///
+    /// If no move was found successfully, returns [`None`].
+    pub fn search_utility(&self, state: &T) -> Option<(Move, f32)> {
+        self.start_time.set(Some(Instant::now()));
+        let (best_move, utility) = self.max_value(state, f32::NEG_INFINITY, f32::INFINITY, 0);
+        self.start_time.set(None);
+        match best_move {
+            None => None,
+            Some(m) => Some((m, utility)),
+        }
+    }
+
+    /// Search for the optimal move using the minimax algorithm and
+    /// alpha-beta pruning, based on the set configuration parameters.
+    ///
+    /// To also return the evaluated utility of the optimal move, call
+    /// [`search_utility`](Self::search_utility) instead.
+    ///
     /// If no move was found successfully, returns [`None`].
     pub fn search(&self, state: &T) -> Option<Move> {
-        self.start_time.set(Some(Instant::now()));
-
-        // TODO: Implement iterative deepening.
-
-        let (best_move, _) = self.max_value(state, f32::NEG_INFINITY, f32::INFINITY, 0);
-
-        self.start_time.set(None);
-        best_move
+        self.search_utility(state).map(|(m, _)| m)
     }
 
     /// Determines whether the algorithm has been running longer than requested.

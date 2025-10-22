@@ -2,14 +2,15 @@
 
 use crate::game::{GameOutcome, GameState, Mancala, Move, Player};
 use crate::minimax::MinimaxBuilder;
-use rand::seq::IndexedRandom;
 use std::io::Write;
 
+/// Helper function for collecting valid user inputs via standard input.
 fn user_move_input<T: Mancala>(state: &T) -> Move {
     let mut selection: Option<Move> = None;
     let player_int: usize = state.current_turn().into();
     let valid_moves = state.valid_moves();
 
+    // Loop until the player inputs a valid move.
     while selection.is_none() {
         print!("PLAYER {} SELECTION: ", player_int);
         std::io::stdout().flush().unwrap();
@@ -34,23 +35,25 @@ fn user_move_input<T: Mancala>(state: &T) -> Move {
     selection.unwrap()
 }
 
+/// Start a terminal-based game of Mancala between a player and a specified
+/// minimax algorithm based on an initial state.
 pub fn player_v_minimax<T: Mancala>(
     initial_state: &T,
     minimax_builder: &MinimaxBuilder<T>,
     minimax_player: Player,
 ) -> GameOutcome {
-    let mut rng = rand::rng();
     let mut s = initial_state.clone();
     let minimax = minimax_builder.build();
 
     while !s.is_over() {
         println!("{}", s);
         if s.current_turn() == minimax_player {
-            let best_move = minimax
-                .search(&s)
-                .unwrap_or(*s.valid_moves().choose(&mut rng).unwrap());
-            s = s.make_move(best_move).unwrap();
-            println!("MINIMAX SELECTED: {:?}\n", best_move);
+            let chosen_move: Move;
+            (s, chosen_move) = match minimax.search(&s) {
+                Some(m) => (s.make_move(m).unwrap(), m),
+                None => s.make_move_rand().unwrap(),
+            };
+            println!("MINIMAX SELECTED: {:?}\n", chosen_move);
         } else {
             s = s.make_move(user_move_input(&s)).unwrap();
             println!();
@@ -73,11 +76,16 @@ pub fn player_v_minimax<T: Mancala>(
     winner
 }
 
+/// Start a terminal-based game of Mancala between a player and the default
+/// minimax algorithm specified by [`MinimaxBuilder::default()`], using the
+/// default game state specified by [`GameState::default()`].
 pub fn player_v_minimax_default(minimax_player: Player) -> GameOutcome {
     let minimax_builder = MinimaxBuilder::default().optimize_for(minimax_player);
     player_v_minimax(&GameState::default(), &minimax_builder, minimax_player)
 }
 
+/// Start a terminal-based game of Mancala between two players based on
+/// an initial board state.
 pub fn player_v_player<T: Mancala>(initial_state: &T) -> GameOutcome {
     let mut s = initial_state.clone();
 
@@ -98,6 +106,8 @@ pub fn player_v_player<T: Mancala>(initial_state: &T) -> GameOutcome {
     winner
 }
 
+/// Start a terminal-based game of Mancala between two players based on
+/// the default game state specified by [`GameState::default()`].
 pub fn player_v_player_default() -> GameOutcome {
     player_v_player(&GameState::default())
 }

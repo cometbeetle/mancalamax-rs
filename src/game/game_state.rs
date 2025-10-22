@@ -54,6 +54,10 @@ impl<const N: usize> Display for GameState<N> {
 }
 
 impl Default for GameState<6> {
+    /// The default Mancala board state is one in which each player
+    /// has 6 pits, each containing 4 stones. The ply is set to 1,
+    /// and the current turn is set to Player 1. Both stores start
+    /// empty.
     fn default() -> Self {
         Self {
             board: [[4; 6]; 2],

@@ -32,6 +32,10 @@ impl Display for DynGameState {
 }
 
 impl Default for DynGameState {
+    /// The default Mancala board state is one in which each player
+    /// has 6 pits, each containing 4 stones. The ply is set to 1,
+    /// and the current turn is set to Player 1. Both stores start
+    /// empty.
     fn default() -> Self {
         Self {
             board: [vec![4; 6], vec![4; 6]],

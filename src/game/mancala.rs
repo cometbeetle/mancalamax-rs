@@ -1,5 +1,6 @@
 //! Traits and enums necessary for Mancala gameplay.
 
+use rand::seq::IndexedRandom;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
 
@@ -171,6 +172,10 @@ pub trait Mancala: Clone + Display {
     ///
     /// The default implementation of [`make_move`][Self::make_move] roughly
     /// follows the gameplay rules of the "Kalah" variant of Mancala.
+    ///
+    /// Note that, in the implementation, we do not explicitly check if the
+    /// selected move is in [`valid_moves`][Self::valid_moves]. This improves
+    /// performance by skipping unnecessary [`Vec`] allocations.
     fn make_move(&self, selection: Move) -> Option<Self> {
         // Make a copy of the current state.
         let mut new_state = self.clone();
@@ -304,6 +309,17 @@ pub trait Mancala: Clone + Display {
     /// Helper method to select the swap move without the encapsulating enum.
     fn make_move_swap(&self) -> Option<Self> {
         self.make_move(Move::Swap)
+    }
+
+    /// Make a random move, selected from the available moves.
+    ///
+    /// Returns a pair of (new_state, selected_move).
+    fn make_move_rand(&self) -> Option<(Self, Move)> {
+        let mut rng = rand::rng();
+        match self.valid_moves().choose(&mut rng) {
+            Some(m) => self.make_move(*m).map(|s| (s, *m)),
+            None => None,
+        }
     }
 
     /// Returns the number of pits per player for the current game.

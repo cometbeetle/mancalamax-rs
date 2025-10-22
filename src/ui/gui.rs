@@ -4,8 +4,7 @@ use bevy::prelude::*;
 
 pub fn make_gui() {
     let mut app = App::new();
-    app.add_plugins(DefaultPlugins)
-        .add_systems(Startup, setup);
+    app.add_plugins(DefaultPlugins).add_systems(Startup, setup);
     app.add_systems(Update, toggle_wireframe);
     app.run();
 }
@@ -55,7 +54,7 @@ fn toggle_wireframe(
     window: Single<&Window, With<bevy::window::PrimaryWindow>>,
 ) {
     if keyboard.just_pressed(KeyCode::Space) {
-       println!("toggle_wireframe");
+        println!("toggle_wireframe");
     }
     if mouse.just_pressed(MouseButton::Left) {
         if let Some(position) = window.cursor_position() {
