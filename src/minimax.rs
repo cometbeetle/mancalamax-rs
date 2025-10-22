@@ -73,8 +73,8 @@ impl<T: Mancala> MinimaxBuilder<T> {
     /// WARNING: If [`None`] is selected, and [`max_depth`](Self::max_depth) is also set to
     /// [`None`], the algorithm will not terminate unless all states have been searched,
     /// which may take time exponential in the number of remaining move combinations.
-    pub fn max_time(mut self, time: Duration) -> Self {
-        self.max_time = Some(time);
+    pub fn max_time(mut self, time: Option<Duration>) -> Self {
+        self.max_time = time;
         self
     }
 
