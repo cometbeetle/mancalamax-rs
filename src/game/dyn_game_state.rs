@@ -23,7 +23,7 @@ pub struct DynGameState {
     stores: [usize; 2],
     ply: usize,
     current_turn: Player,
-    player2_moved: bool,
+    p2_moved: bool,
 }
 
 impl Display for DynGameState {
@@ -43,7 +43,7 @@ impl Default for DynGameState {
             stores: [0, 0],
             ply: 1,
             current_turn: Player::One,
-            player2_moved: false,
+            p2_moved: false,
         }
     }
 }
@@ -67,12 +67,12 @@ impl Mancala for DynGameState {
         self.current_turn
     }
 
-    fn player2_moved(&self) -> bool {
-        self.player2_moved
+    fn p2_moved(&self) -> bool {
+        self.p2_moved
     }
 
-    fn set_player2_moved(&mut self, value: bool) {
-        self.player2_moved = value;
+    fn set_p2_moved(&mut self, value: bool) {
+        self.p2_moved = value;
     }
 
     fn board_mut(&mut self) -> &mut [Self::Board; 2] {
@@ -99,7 +99,7 @@ impl<const N: usize> From<GameState<N>> for DynGameState {
             stores: *value.stores(),
             ply: value.ply(),
             current_turn: value.current_turn(),
-            player2_moved: value.player2_moved(),
+            p2_moved: value.p2_moved(),
         }
     }
 }
@@ -114,14 +114,14 @@ impl DynGameState {
         store_2: usize,
         current_turn: Player,
         ply: usize,
-        player2_moved: bool,
+        p2_moved: bool,
     ) -> Self {
         Self {
             board: [vec![stones_per; pits], vec![stones_per; pits]],
             stores: [store_1, store_2],
             ply,
             current_turn,
-            player2_moved,
+            p2_moved,
         }
     }
 
@@ -134,7 +134,7 @@ impl DynGameState {
         store_2: usize,
         current_turn: Player,
         ply: usize,
-        player2_moved: bool,
+        p2_moved: bool,
     ) -> Self {
         assert_eq!(
             board.len(),
@@ -157,7 +157,7 @@ impl DynGameState {
             stores: [store_1, store_2],
             ply,
             current_turn,
-            player2_moved,
+            p2_moved,
         }
     }
 
@@ -168,14 +168,14 @@ impl DynGameState {
         store_2: usize,
         current_turn: Player,
         ply: usize,
-        player2_moved: bool,
+        p2_moved: bool,
     ) -> Self {
         Self {
             board: [board[0].to_vec(), board[1].to_vec()],
             stores: [store_1, store_2],
             ply,
             current_turn,
-            player2_moved,
+            p2_moved,
         }
     }
 }

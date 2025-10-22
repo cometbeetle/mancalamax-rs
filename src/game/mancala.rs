@@ -121,7 +121,7 @@ pub trait Mancala: Clone + Display {
 
     /// Determines whether the swap move is currently allowed.
     fn swap_allowed(&self) -> bool {
-        !self.player2_moved() && self.current_turn() == Player::Two
+        !self.p2_moved() && self.current_turn() == Player::Two
     }
 
     /// Returns a vector of moves that are currently valid for the current player.
@@ -197,8 +197,8 @@ pub trait Mancala: Clone + Display {
         };
 
         // Ensure swap move is only available on Player 2's first move.
-        if !new_state.player2_moved() && new_state.current_turn() == Player::Two {
-            new_state.set_player2_moved(true);
+        if !new_state.p2_moved() && new_state.current_turn() == Player::Two {
+            new_state.set_p2_moved(true);
         }
 
         // Get current player, find adjusted pit index, and collect number of stones to distribute.
@@ -345,10 +345,10 @@ pub trait Mancala: Clone + Display {
     ///
     /// This is used primarily for determining whether the swap move
     /// should be allowed.
-    fn player2_moved(&self) -> bool;
+    fn p2_moved(&self) -> bool;
 
     /// Sets the variable indicating whether Player 2 has moved yet.
-    fn set_player2_moved(&mut self, value: bool);
+    fn set_p2_moved(&mut self, value: bool);
 
     /// Provides mutable access to the board.
     ///
