@@ -211,6 +211,21 @@ impl<T: Mancala> Minimax<T> {
         }
     }
 
+    /// Search for all possible moves and their utilities using the minimax algorithm
+    /// and alpha-beta pruning, based on the set configuration parameters.
+    ///
+    /// Note that, to find the utilities for every valid move, alpha-beta pruning is
+    /// disabled for the first call to the utility maximizer. This decreases performance
+    /// by a significant amount.
+    ///
+    /// If no moves could be successfully evaluated, returns [`None`].
+    pub fn search_utility_all(&self, state: &T) -> Option<Vec<(Move, f32)>> {
+        self.start_time.set(Some(Instant::now()));
+        let result = self.max_value_all(state, 0);
+        self.start_time.set(None);
+        result
+    }
+
     /// Search for the optimal move using the minimax algorithm and
     /// alpha-beta pruning, based on the set configuration parameters.
     ///
@@ -232,13 +247,43 @@ impl<T: Mancala> Minimax<T> {
         }
     }
 
+    /// Maximize the utility / heuristic for a given state, and return a vector
+    /// of (move, utility) pairs that do so.
+    fn max_value_all(&self, state: &T, depth: usize) -> Option<Vec<(Move, f32)>> {
+        assert_ne!(
+            self.start_time.get(),
+            None,
+            "Minimax search must be started with `search()` before calling `max_value_all`"
+        );
+
+        // Stop if in a terminal state, or the artificial limit is exceeded.
+        if state.is_over() || self.max_depth.is_some_and(|d| depth >= d) || self.time_exceeded() {
+            return None;
+        }
+
+        let depth = depth + 1;
+        let mut move_utils: Vec<(Move, f32)> = Vec::new();
+
+        for m in self.order_moves(state) {
+            let new_state = state.make_move(m).unwrap();
+            let (_, utility) = if new_state.current_turn() == state.current_turn() {
+                self.max_value(&new_state, f32::NEG_INFINITY, f32::INFINITY, depth)
+            } else {
+                self.min_value(&new_state, f32::NEG_INFINITY, f32::INFINITY, depth)
+            };
+            move_utils.push((m, utility));
+        }
+
+        Some(move_utils)
+    }
+
     /// Maximize the utility / heuristic for a given state, and return the
     /// (move, utility) pair that does so.
     fn max_value(&self, state: &T, alpha: f32, beta: f32, depth: usize) -> (Option<Move>, f32) {
         assert_ne!(
             self.start_time.get(),
             None,
-            "Minimax search must be started with `search()` before calling `min_value`"
+            "Minimax search must be started with `search()` before calling `max_value`"
         );
 
         // If we are in a terminal state, evaluate utility.
