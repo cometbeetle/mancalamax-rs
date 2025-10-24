@@ -352,8 +352,10 @@ pub trait Mancala: Clone + Display {
 
     /// Provides mutable access to the board.
     ///
-    /// NOTE: If used incorrectly, this method can lead to errors if the
+    /// <div class="warning">
+    /// If used incorrectly, this method can lead to errors if the
     /// board is put into an improper state.
+    /// </div>
     fn board_mut(&mut self) -> &mut [Self::Board; 2];
 
     /// Provides mutable access to the stores.

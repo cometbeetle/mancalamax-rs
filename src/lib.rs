@@ -5,6 +5,7 @@
 
 pub mod game;
 pub mod minimax;
+pub mod ml;
 pub mod ui;
 
 #[cfg(test)]

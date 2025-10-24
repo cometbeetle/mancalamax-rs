@@ -77,8 +77,8 @@ pub fn player_v_minimax<T: Mancala>(
 }
 
 /// Start a terminal-based game of Mancala between a player and the default
-/// minimax algorithm specified by [`MinimaxBuilder::default()`], using the
-/// default game state specified by [`GameState::default()`].
+/// minimax algorithm specified by [`MinimaxBuilder::default`], using the
+/// default game state specified by [`GameState::default`].
 pub fn player_v_minimax_default(minimax_player: Player) -> GameOutcome {
     let minimax_builder = MinimaxBuilder::default().optimize_for(minimax_player);
     player_v_minimax(&GameState::default(), &minimax_builder, minimax_player)
@@ -107,7 +107,7 @@ pub fn player_v_player<T: Mancala>(initial_state: &T) -> GameOutcome {
 }
 
 /// Start a terminal-based game of Mancala between two players based on
-/// the default game state specified by [`GameState::default()`].
+/// the default game state specified by [`GameState::default`].
 pub fn player_v_player_default() -> GameOutcome {
     player_v_player(&GameState::default())
 }
