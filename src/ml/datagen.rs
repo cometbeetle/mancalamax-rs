@@ -1,25 +1,31 @@
 //! Components for generating synthetic datasets for machine learning tasks.
 
-use crate::game::{GameState, Mancala, Move};
+use crate::game::{GameState, Mancala, Move, Player};
 use crate::minimax::MinimaxBuilder;
 use burn::prelude::*;
 use burn::tensor::activation;
 use rayon::prelude::*;
+use std::collections::HashSet;
 use std::path::Path;
 
-pub fn save_dataset<B: Backend, P: AsRef<Path>>(data: &Tensor<B, 2>, out_file: P) {
+pub fn save_dataset<P: AsRef<Path>>(data: &Vec<Vec<f32>>, out_file: P) {
     // Save dataset to file.
 }
 
-pub fn generate_dataset_default<B: Backend>(max_moves: usize, runs: usize) -> Tensor<B, 2> {
-    generate_dataset(&MinimaxBuilder::new(), max_moves, runs)
-}
-
-pub fn generate_dataset<B: Backend>(
-    minimax: &MinimaxBuilder<GameState<6>>,
+pub fn generate_dataset_default<B: Backend>(
     max_moves: usize,
     runs: usize,
-) -> Tensor<B, 2> {
+    deduplicate: bool,
+) -> Vec<Vec<f32>> {
+    generate_dataset::<B, 6>(&MinimaxBuilder::new(), max_moves, runs, deduplicate)
+}
+
+pub fn generate_dataset<B: Backend, const N: usize>(
+    minimax: &MinimaxBuilder<GameState<N>>,
+    max_moves: usize,
+    runs: usize,
+    deduplicate: bool,
+) -> Vec<Vec<f32>> {
     let device = B::Device::default();
 
     let generate = || {
@@ -28,7 +34,7 @@ pub fn generate_dataset<B: Backend>(
         while n_moves < max_moves {
             // Generate a random game state n_moves ahead from the initial state.
             // If out of moves, just use the last one that worked.
-            let mut state = GameState::default();
+            let mut state = GameState::new(4, 0, 0, Player::One, 1, false);
             for _ in 0..n_moves {
                 (state, _) = match state.make_move_rand() {
                     Some(t) => t,
@@ -62,7 +68,7 @@ pub fn generate_dataset<B: Backend>(
             example.push(state.current_turn() as usize as f32);
 
             // Push softmax values for utility on each move.
-            let mut util_vec: Vec<f32> = vec![f32::NEG_INFINITY; 7];
+            let mut util_vec = vec![f32::NEG_INFINITY; N + 1];
             for (mv, util) in utilities {
                 let mv = match mv {
                     Move::Swap => 0,
@@ -82,14 +88,27 @@ pub fn generate_dataset<B: Backend>(
         data
     };
 
-    let result: Vec<Vec<f32>> = (0..runs)
+    let mut result: Vec<Vec<f32>> = (0..runs)
         .into_par_iter()
         .map(|_| generate())
         .flatten()
         .collect();
-    let (dim1, dim2) = (result.len(), result[0].len());
-    let data = TensorData::new(result.into_iter().flatten().collect(), &[dim1, dim2]);
-    Tensor::<B, 2>::from_data(data, &device)
+
+    if deduplicate {
+        let mut seen = HashSet::new();
+        let mut unique = Vec::new();
+
+        for item in result {
+            let key: Vec<u32> = item.iter().map(|x| x.to_bits()).collect();
+            if seen.insert(key) {
+                unique.push(item);
+            }
+        }
+
+        result = unique;
+    }
+
+    result
 }
 
 // TODO: Add docs, clean up, make this optimal. May want to use Dataset from Burn directly.
