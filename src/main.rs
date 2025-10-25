@@ -13,7 +13,7 @@ fn main() {
     //println!("{:?}", GameState::default().valid_moves());
     //type B = burn::backend::Cuda;
     type B = burn::backend::NdArray;
-    let result = generate_dataset_default::<B>(20, 5);
+    let result = generate_dataset_default::<B>(20, 500);
     for e in result.iter_dim(0) {
         for i in e.to_data().iter() {
             let i: f32 = i;

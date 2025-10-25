@@ -5073,6 +5073,7 @@ dependencies = [
  "bevy",
  "burn",
  "rand 0.9.2",
+ "rayon",
  "serde",
 ]
 

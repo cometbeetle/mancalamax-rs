@@ -4,6 +4,7 @@ use crate::game::{GameState, Mancala, Move};
 use crate::minimax::MinimaxBuilder;
 use burn::prelude::*;
 use burn::tensor::activation;
+use rayon::prelude::*;
 use std::path::Path;
 
 pub fn save_dataset<B: Backend, P: AsRef<Path>>(data: &Tensor<B, 2>, out_file: P) {
@@ -20,9 +21,9 @@ pub fn generate_dataset<B: Backend>(
     runs: usize,
 ) -> Tensor<B, 2> {
     let device = B::Device::default();
-    let mut data: Vec<Vec<f32>> = Vec::new();
 
-    for _ in 0..runs {
+    let generate = || {
+        let mut data: Vec<Vec<f32>> = Vec::new();
         let mut n_moves = 0;
         while n_moves < max_moves {
             // Generate a random game state n_moves ahead from the initial state.
@@ -78,10 +79,16 @@ pub fn generate_dataset<B: Backend>(
             data.push(example);
             n_moves += 1;
         }
-    }
+        data
+    };
 
-    let (dim1, dim2) = (data.len(), data[0].len());
-    let data = TensorData::new(data.into_iter().flatten().collect(), &[dim1, dim2]);
+    let result: Vec<Vec<f32>> = (0..runs)
+        .into_par_iter()
+        .map(|_| generate())
+        .flatten()
+        .collect();
+    let (dim1, dim2) = (result.len(), result[0].len());
+    let data = TensorData::new(result.into_iter().flatten().collect(), &[dim1, dim2]);
     Tensor::<B, 2>::from_data(data, &device)
 }
 
