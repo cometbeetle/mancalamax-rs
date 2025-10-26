@@ -133,8 +133,25 @@ impl From<Vec<f32>> for MancalaExample<DynGameState> {
 impl<T: Mancala> MancalaExample<T> {
     /// Create a new Mancala example given a game state and vector of
     /// (move, utility) pairs.
+    ///
+    /// If the `utilities` parameter does not include a (move, utility)
+    /// pair for every possible move, then, based on the supplied state, additional
+    /// pairs will be added with utilities of negative infinity.
+    ///
+    /// Note that this means the [`serde_json`] crate will fail to properly
+    /// serialize / deserialize examples, since standard JSON cannot handle
+    /// infinite float values. Use [`serde_json5`] for a functional equivalent.
     pub fn new(state: T, utilities: Vec<(Move, f32)>) -> Self {
-        Self { state, utilities }
+        let mut expanded_utils: Vec<(Move, f32)> = utilities;
+        for i in 0..=state.pits() {
+            if expanded_utils.iter().all(|(m, _)| usize::from(*m) != i) {
+                expanded_utils.push((Move::from(i), f32::NEG_INFINITY));
+            }
+        }
+        Self {
+            state,
+            utilities: expanded_utils,
+        }
     }
 
     /// Provides a reference to the game state stored in the example.
