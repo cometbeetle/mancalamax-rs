@@ -1,3 +1,5 @@
 //! Modules and components related to machine learning.
 
-pub mod datagen;
+pub mod dataset;
+
+pub use dataset::{MancalaDataset, MancalaExample};

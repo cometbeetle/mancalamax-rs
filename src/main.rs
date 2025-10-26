@@ -1,7 +1,8 @@
+use burn::data::dataset::Dataset;
 use mancalamax::game::{DynGameState, GameState};
 use mancalamax::game::{Mancala, Move, Player};
 use mancalamax::minimax::MinimaxBuilder;
-use mancalamax::ml::datagen::generate_dataset_default;
+use mancalamax::ml::MancalaDataset;
 use mancalamax::ui::{player_v_minimax, player_v_minimax_default, player_v_player_default};
 
 fn main() {
@@ -11,14 +12,14 @@ fn main() {
     //player_v_minimax(&GameState::default(), &minimax, Player::One);
     //mancalamax::ui::gui::make_gui();
     //println!("{:?}", GameState::default().valid_moves());
-    //type B = burn::backend::Cuda;
-    type B = burn::backend::NdArray;
-    let result = generate_dataset_default::<B>(70, 100, true);
-    for e in result {
-        for i in e {
-            let i: f32 = i;
-            print!("{} ", i);
-        }
-        println!();
-    }
+
+    let result = MancalaDataset::generate_default(70, 500).deduplicated();
+    println!("{}", result.len());
+    println!("{:?}", result.data()[11]);
+
+    result.save_csv("mancala.csv").expect("Could not save csv");
+
+    let z = MancalaDataset::from_csv("mancala.csv").unwrap();
+    println!("{}", z.data().len());
+    println!("{:?}", z.data()[11]);
 }

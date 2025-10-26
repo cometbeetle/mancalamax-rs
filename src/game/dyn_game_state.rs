@@ -16,7 +16,7 @@ use std::fmt::{Display, Formatter};
 ///
 /// If the `serde` feature is enabled, this struct will be serializable and
 /// deserializable.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DynGameState {
     board: [Vec<usize>; 2],

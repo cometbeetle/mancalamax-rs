@@ -18,7 +18,7 @@ use std::fmt::{Display, Formatter};
 ///
 /// If the `serde` feature is enabled, this struct will be serializable and
 /// deserializable, via automatic conversion to and from [`DynGameState`].
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct GameState<const N: usize> {
     board: [[usize; N]; 2],
     stores: [usize; 2],

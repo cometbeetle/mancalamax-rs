@@ -5,6 +5,7 @@
 
 pub mod game;
 pub mod minimax;
+#[cfg(feature = "ml")]
 pub mod ml;
 pub mod ui;
 

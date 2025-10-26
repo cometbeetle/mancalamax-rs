@@ -2,6 +2,7 @@
 
 use rand::seq::IndexedRandom;
 use std::fmt::Display;
+use std::hash::Hash;
 use std::ops::{Index, IndexMut};
 
 /// Mancala games have two players. Therefore, the [`Player`] enum can be one
@@ -45,6 +46,16 @@ impl From<Player> for usize {
     }
 }
 
+impl From<usize> for Player {
+    fn from(value: usize) -> Self {
+        match value {
+            1 => Player::One,
+            2 => Player::Two,
+            _ => panic!("Player number must be 1 or 2"),
+        }
+    }
+}
+
 /// Represents one of the two types of move during Mancala gameplay.
 ///
 /// Players can either select a pit from which to distribute stones, or,
@@ -58,6 +69,44 @@ impl From<Player> for usize {
 pub enum Move {
     Pit(usize),
     Swap,
+}
+
+impl<T> Index<Move> for [T] {
+    type Output = T;
+
+    fn index(&self, index: Move) -> &Self::Output {
+        match index {
+            Move::Pit(i) => &self[i],
+            Move::Swap => &self[0],
+        }
+    }
+}
+
+impl<T> IndexMut<Move> for [T] {
+    fn index_mut(&mut self, index: Move) -> &mut Self::Output {
+        match index {
+            Move::Pit(i) => &mut self[i],
+            Move::Swap => &mut self[0],
+        }
+    }
+}
+
+impl From<Move> for usize {
+    fn from(value: Move) -> Self {
+        match value {
+            Move::Pit(i) => i,
+            Move::Swap => 0,
+        }
+    }
+}
+
+impl From<usize> for Move {
+    fn from(value: usize) -> Self {
+        match value {
+            i @ 1.. => Move::Pit(i),
+            0 => Move::Swap,
+        }
+    }
 }
 
 /// Used to describe the current outcome of a game state.
@@ -74,7 +123,7 @@ pub enum GameOutcome {
 /// Provides a default implementation of Mancala gameplay for all implementors,
 /// and specifies certain accessor and mutable reference methods that must be
 /// implemented on a per-type basis (i.e., no default implementation can be provided).
-pub trait Mancala: Clone + Display {
+pub trait Mancala: Clone + Display + Send + Sync + Hash + PartialEq + Eq {
     /// Used to indicate the underlying array-like type used to store
     /// the board contents for each player.
     type Board: AsRef<[usize]> + AsMut<[usize]>;
