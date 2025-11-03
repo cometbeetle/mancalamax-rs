@@ -63,7 +63,7 @@ impl<T: Mancala> Eq for MancalaExample<T> {}
 
 impl<T: Mancala> From<&MancalaExample<T>> for Vec<f32> {
     fn from(value: &MancalaExample<T>) -> Self {
-        let mut result: Vec<f32> = Vec::new();
+        let mut result: Vec<f32> = Vec::with_capacity(3 * value.state.pits() + 5);
 
         // Push stores.
         for i in value.state.stores() {

@@ -13,7 +13,7 @@ categories = ["algorithms"]
 
 [features]
 gui = ["dep:bevy"]
-serde = ["dep:serde", "dep:serde_json5"]
+serde = ["dep:serde"]
 ml = ["dep:burn", "dep:rayon", "dep:csv"]
 cuda = ["ml", "burn/cuda"]
 wgpu = ["ml", "burn/wgpu"]
@@ -21,8 +21,7 @@ wgpu = ["ml", "burn/wgpu"]
 [dependencies]
 rand = "0.9"
 serde = { version = "1.0", features = ["derive"], optional = true }
-serde_json5 = { version = "0.2.1", optional = true }  # TODO: This should be removed. Users install it.
-bevy = { version = "0.17", optional = true }
+bevy = { version = "0.17.2", optional = true }
 burn = { version = "0.18.0", features = ["ndarray", "autodiff", "dataset"], optional = true }
 rayon = { version = "1.11.0", optional = true }
 csv = { version = "1.4.0", optional = true }
