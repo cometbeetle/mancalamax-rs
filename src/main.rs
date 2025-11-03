@@ -19,3 +19,12 @@ fn main() {
     // Test CSV functionality.
     result.save_csv("mancala.csv").expect("Could not save csv");
 }
+
+// TODO: Maybe, we should have the datasets just return Tensors instead of individual example structs.
+// TODO: Might make more efficient for training? Focus on Python for now though.
+
+// TODO: OR - BETTER IDEA - Have separate struct that is a dataset that is actually
+//       ready for training (i.e., one made of tensors, proper bord reordering, etc.)
+
+
+// TODO: Use Polars to handle the CSV writing / maybe some dataset management.
