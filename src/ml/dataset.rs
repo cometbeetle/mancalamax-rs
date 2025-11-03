@@ -11,6 +11,14 @@ use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 
+fn len_to_pits(len: usize) -> usize {
+    (len - 5) / 3
+}
+
+fn pits_to_len(n_pits: usize) -> usize {
+    3 * n_pits + 5
+}
+
 /// Represents a single training example in a dataset.
 ///
 /// Can be converted to a [`Vec<f32>`] with components in the following order:
@@ -63,7 +71,7 @@ impl<T: Mancala> Eq for MancalaExample<T> {}
 
 impl<T: Mancala> From<&MancalaExample<T>> for Vec<f32> {
     fn from(value: &MancalaExample<T>) -> Self {
-        let mut result: Vec<f32> = Vec::with_capacity(3 * value.state.pits() + 5);
+        let mut result: Vec<f32> = Vec::with_capacity(pits_to_len(value.state.pits()));
 
         // Push stores.
         for i in value.state.stores() {
@@ -105,7 +113,7 @@ impl<T: Mancala> From<MancalaExample<T>> for Vec<f32> {
 
 impl From<Vec<f32>> for MancalaExample<DynGameState> {
     fn from(value: Vec<f32>) -> Self {
-        let n_pits = (value.len() - 5) / 3;
+        let n_pits = len_to_pits(value.len());
         let (store_1, store_2) = (value[0] as usize, value[1] as usize);
         let player1: Vec<usize> = value[2..2 + n_pits].iter().map(|x| *x as usize).collect();
         let player2: Vec<usize> = value[2 + n_pits..2 + 2 * n_pits]
