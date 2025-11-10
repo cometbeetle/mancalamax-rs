@@ -26,5 +26,4 @@ fn main() {
 // TODO: OR - BETTER IDEA - Have separate struct that is a dataset that is actually
 //       ready for training (i.e., one made of tensors, proper bord reordering, etc.)
 
-
 // TODO: Use Polars to handle the CSV writing / maybe some dataset management.

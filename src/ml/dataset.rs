@@ -232,6 +232,54 @@ impl<T: Mancala> MancalaDataset<T> {
         );
         self.data[0].state.pits()
     }
+
+    /// Consume and return the current dataset without duplicates.
+    pub fn deduplicated(mut self) -> Self {
+        let mut seen = HashSet::new();
+        let mut unique = Vec::new();
+
+        for item in self.data {
+            if seen.insert(item.clone()) {
+                unique.push(item);
+            }
+        }
+
+        self.data = unique;
+        self
+    }
+
+    /// Save the current dataset to a CSV file, based on the format described
+    /// in [`MancalaExample`].
+    pub fn save_csv<P: AsRef<Path>>(&self, path: P) -> Result<(), Box<dyn Error>> {
+        let mut wtr = Writer::from_writer(File::create(path)?);
+
+        let mut header: Vec<String> = vec!["store1".into(), "store2".into()];
+        for i in 1..=2 {
+            for p in 1..=self.pits() {
+                header.push(format!("player{}p{}", i, p));
+            }
+        }
+        header.extend(vec![
+            "turn".into(),
+            "ply".into(),
+            "p2_moved".into(),
+            "util_swap".into(),
+        ]);
+        for p in 1..=self.pits() {
+            header.push(format!("util_{}", p));
+        }
+
+        wtr.write_record(header)?;
+
+        for row in &self.data {
+            let string_row: Vec<String> = row.make_vec().iter().map(|x| x.to_string()).collect();
+            wtr.write_record(&string_row)?;
+        }
+
+        // Flush the writer to ensure all data is written
+        wtr.flush()?;
+        Ok(())
+    }
 }
 
 impl MancalaDataset<GameState<6>> {
@@ -291,56 +339,6 @@ impl<const N: usize> MancalaDataset<GameState<N>> {
             .collect();
 
         Self { data: result }
-    }
-}
-
-impl<T: Mancala> MancalaDataset<T> {
-    /// Consume and return the current dataset without duplicates.
-    pub fn deduplicated(mut self) -> Self {
-        let mut seen = HashSet::new();
-        let mut unique = Vec::new();
-
-        for item in self.data {
-            if seen.insert(item.clone()) {
-                unique.push(item);
-            }
-        }
-
-        self.data = unique;
-        self
-    }
-
-    /// Save the current dataset to a CSV file, based on the format described
-    /// in [`MancalaExample`].
-    pub fn save_csv<P: AsRef<Path>>(&self, path: P) -> Result<(), Box<dyn Error>> {
-        let mut wtr = Writer::from_writer(File::create(path)?);
-
-        let mut header: Vec<String> = vec!["store1".into(), "store2".into()];
-        for i in 1..=2 {
-            for p in 1..=self.pits() {
-                header.push(format!("player{}p{}", i, p));
-            }
-        }
-        header.extend(vec![
-            "turn".into(),
-            "ply".into(),
-            "p2_moved".into(),
-            "util_swap".into(),
-        ]);
-        for p in 1..=self.pits() {
-            header.push(format!("util_{}", p));
-        }
-
-        wtr.write_record(header)?;
-
-        for row in &self.data {
-            let string_row: Vec<String> = row.make_vec().iter().map(|x| x.to_string()).collect();
-            wtr.write_record(&string_row)?;
-        }
-
-        // Flush the writer to ensure all data is written
-        wtr.flush()?;
-        Ok(())
     }
 }
 
