@@ -3,7 +3,10 @@ use mancalamax::game::{DynGameState, GameState};
 use mancalamax::game::{Mancala, Move, Player};
 use mancalamax::minimax::MinimaxBuilder;
 use mancalamax::ml::MancalaDataset;
-use mancalamax::ui::{player_v_minimax, player_v_minimax_default, player_v_player_default};
+use mancalamax::ui::{
+    ExternalInterface, minimax_v_external, player_v_external, player_v_minimax,
+    player_v_minimax_default, player_v_player_default,
+};
 
 fn main() {
     //player_v_player_default();
@@ -13,11 +16,26 @@ fn main() {
     //mancalamax::ui::gui::make_gui();
     //println!("{:?}", GameState::default().valid_moves());
 
-    let result = MancalaDataset::generate_default(70, 100000).deduplicated();
-    println!("{}", result.len());
+    //let result = MancalaDataset::generate_default(70, 100000).deduplicated();
+    //println!("{}", result.len());
 
     // Test CSV functionality.
-    result.save_csv("mancala.csv").expect("Could not save csv");
+    //result.save_csv("mancala.csv").expect("Could not save csv");
+
+    //player_v_external(
+    //    &GameState::default(),
+    //    Player::Two,
+    //    ExternalInterface::Minimal,
+    //    "C:\\Users\\ethan\\Desktop\\test_dir",
+    //);
+
+    minimax_v_external(
+        &GameState::default(),
+        &MinimaxBuilder::default().max_depth(Some(0)),
+        Player::Two,
+        ExternalInterface::Minimal,
+        "C:\\Users\\ethan\\Desktop\\test_dir",
+    );
 }
 
 // TODO: Maybe, we should have the datasets just return Tensors instead of individual example structs.
