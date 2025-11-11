@@ -2,7 +2,7 @@
 
 use crate::game::{GameOutcome, GameState, Mancala, Move, Player};
 use crate::minimax::MinimaxBuilder;
-use std::error::Error;
+use regex::Regex;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::{self, Write};
@@ -44,11 +44,7 @@ impl ExternalInterface {
         }
     }
 
-    pub fn write_board<T: Mancala, P: AsRef<Path>>(
-        &self,
-        path: P,
-        state: &T,
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn write_board<T: Mancala, P: AsRef<Path>>(&self, path: P, state: &T) -> io::Result<()> {
         match self {
             ExternalInterface::Full => {
                 todo!()
@@ -113,6 +109,71 @@ fn user_move_input<T: Mancala>(state: &T) -> Move {
         };
     }
     selection.unwrap()
+}
+
+/// Helper function for collecting valid external moves from an external interface.
+fn external_move_input<T: Mancala, P: AsRef<Path>>(
+    state: &T,
+    interface: ExternalInterface,
+    comm_dir: P,
+    current_move: usize,
+) -> Move {
+    let comm_dir = comm_dir.as_ref();
+
+    // Write board to external player.
+    interface
+        .write_board(comm_dir.join(format!("board{}.txt", current_move)), state)
+        .unwrap();
+
+    // Read from file until expected number of moves is found.
+    let mut moves: Vec<Move> = Vec::new();
+    while moves.len() != state.pits() + 1 {
+        moves = match interface.read_moves(comm_dir.join(format!("moves{}.txt", current_move))) {
+            Ok(m) => m,
+            Err(_) => continue,
+        }
+    }
+
+    // Select first valid move.
+    let mut chosen_move: Option<Move> = None;
+    for m in moves {
+        if state.valid_moves().contains(&m) {
+            chosen_move = Some(m);
+            break;
+        }
+    }
+
+    chosen_move.unwrap()
+}
+
+// Helper function to send a reset signal to the external program.
+fn external_reset<P: AsRef<Path>>(comm_dir: P) {
+    let re = Regex::new(r"^(board|moves)\d+\.txt$").unwrap();
+    match fs::read_dir(&comm_dir) {
+        Ok(entries) => {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if path.is_file() {
+                        if let Some(filename) = path.file_name().and_then(|f| f.to_str()) {
+                            if re.is_match(filename) {
+                                match fs::remove_file(&path) {
+                                    Ok(_) => (),
+                                    Err(e) => eprintln!("Failed to remove {:?}: {}", path, e),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Err(e) => eprintln!("Failed to read directory: {}", e),
+    }
+    OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(comm_dir.as_ref().join("RESET.txt"))
+        .expect("Failed to create file");
 }
 
 /// Start a terminal-based game of Mancala between a player and a specified
@@ -192,6 +253,9 @@ pub fn player_v_player_default() -> GameOutcome {
     player_v_player(&GameState::default())
 }
 
+/// Start a terminal-based game of Mancala between a player and an external
+/// agent, using the selected communication interface and directory. A supplied
+/// starting state is used.
 pub fn player_v_external<T: Mancala, P: AsRef<Path>>(
     initial_state: &T,
     external_player: Player,
@@ -205,35 +269,14 @@ pub fn player_v_external<T: Mancala, P: AsRef<Path>>(
     // Create communication directory if it does not exist.
     fs::create_dir_all(comm_dir).unwrap();
 
+    // Reset directory.
+    external_reset(comm_dir);
+
     while !s.is_over() {
         println!("{}", s);
         if s.current_turn() == external_player {
-            // Write board to external player.
-            interface
-                .write_board(comm_dir.join(format!("board{}.txt", current_move)), &s)
-                .unwrap();
-
-            // Read from file until expected number of moves is found.
-            let mut moves: Vec<Move> = Vec::new();
-            while moves.len() != s.pits() + 1 {
-                moves = match interface
-                    .read_moves(comm_dir.join(format!("moves{}.txt", current_move)))
-                {
-                    Ok(m) => m,
-                    Err(_) => continue,
-                }
-            }
-
-            // Select first valid move.
-            let mut chosen_move: Option<Move> = None;
-            for m in moves {
-                if s.valid_moves().contains(&m) {
-                    chosen_move = Some(m);
-                    break;
-                }
-            }
-
-            s = s.make_move(chosen_move.unwrap()).unwrap();
+            let chosen_move = external_move_input(&s, interface, comm_dir, current_move);
+            s = s.make_move(chosen_move).unwrap();
             println!("EXTERNAL SELECTED: {:?}\n", chosen_move);
             current_move += 1;
         } else {
@@ -246,7 +289,7 @@ pub fn player_v_external<T: Mancala, P: AsRef<Path>>(
 
     match winner {
         GameOutcome::Winner(player) if player == external_player => {
-            println!("{}\nWINNER: EXTERNAL PLAYER", s)
+            println!("{}\nWINNER: EXTERNAL AGENT", s)
         }
         GameOutcome::Winner(player) if player != external_player => {
             println!("{}\nWINNER: PLAYER {}", s, usize::from(player))
@@ -258,6 +301,20 @@ pub fn player_v_external<T: Mancala, P: AsRef<Path>>(
     winner
 }
 
+/// Start a terminal-based game of Mancala between a player and an external
+/// agent, using the selected communication interface and directory. The
+/// default starting state is used.
+pub fn player_v_external_default<P: AsRef<Path>>(
+    external_player: Player,
+    interface: ExternalInterface,
+    comm_dir: P,
+) -> GameOutcome {
+    player_v_external(&GameState::default(), external_player, interface, comm_dir)
+}
+
+/// Start a terminal-based game of Mancala between minimax and an external
+/// agent, using the selected communication interface and directory. A supplied
+/// starting state and minimax configuration are used.
 pub fn minimax_v_external<T: Mancala, P: AsRef<Path>>(
     initial_state: &T,
     minimax_builder: &MinimaxBuilder<T>,
@@ -273,35 +330,14 @@ pub fn minimax_v_external<T: Mancala, P: AsRef<Path>>(
     // Create communication directory if it does not exist.
     fs::create_dir_all(comm_dir).unwrap();
 
+    // Reset directory.
+    external_reset(comm_dir);
+
     while !s.is_over() {
         println!("{}", s);
         if s.current_turn() == external_player {
-            // Write board to external player.
-            interface
-                .write_board(comm_dir.join(format!("board{}.txt", current_move)), &s)
-                .unwrap();
-
-            // Read from file until expected number of moves is found.
-            let mut moves: Vec<Move> = Vec::new();
-            while moves.len() != s.pits() + 1 {
-                moves = match interface
-                    .read_moves(comm_dir.join(format!("moves{}.txt", current_move)))
-                {
-                    Ok(m) => m,
-                    Err(_) => continue,
-                }
-            }
-
-            // Select first valid move.
-            let mut chosen_move: Option<Move> = None;
-            for m in moves {
-                if s.valid_moves().contains(&m) {
-                    chosen_move = Some(m);
-                    break;
-                }
-            }
-
-            s = s.make_move(chosen_move.unwrap()).unwrap();
+            let chosen_move = external_move_input(&s, interface, comm_dir, current_move);
+            s = s.make_move(chosen_move).unwrap();
             println!("EXTERNAL SELECTED: {:?}\n", chosen_move);
             current_move += 1;
         } else {
@@ -318,7 +354,7 @@ pub fn minimax_v_external<T: Mancala, P: AsRef<Path>>(
 
     match winner {
         GameOutcome::Winner(player) if player == external_player => {
-            println!("{}\nWINNER: EXTERNAL PLAYER", s)
+            println!("{}\nWINNER: EXTERNAL AGENT", s)
         }
         GameOutcome::Winner(player) if player != external_player => {
             println!("{}\nWINNER: MINIMAX", s)
@@ -330,6 +366,19 @@ pub fn minimax_v_external<T: Mancala, P: AsRef<Path>>(
     winner
 }
 
-// TODO: CLEANUP, AVOID DUPLICATE CODE, MAKE DIRECTORY CLEARED UPON NEW GAME
-
-// TODO: ALSO NEED SOME WAY TO SIGNAL RESTART!
+/// Start a terminal-based game of Mancala between minimax and an external
+/// agent, using the selected communication interface and directory. The default
+/// starting state and minimax configuration are used.
+pub fn minimax_v_external_default<P: AsRef<Path>>(
+    external_player: Player,
+    interface: ExternalInterface,
+    comm_dir: P,
+) -> GameOutcome {
+    minimax_v_external(
+        &GameState::default(),
+        &MinimaxBuilder::default(),
+        external_player,
+        interface,
+        comm_dir,
+    )
+}

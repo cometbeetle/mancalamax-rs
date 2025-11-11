@@ -22,20 +22,20 @@ fn main() {
     // Test CSV functionality.
     //result.save_csv("mancala.csv").expect("Could not save csv");
 
-    //player_v_external(
-    //    &GameState::default(),
-    //    Player::Two,
-    //    ExternalInterface::Minimal,
-    //    "C:\\Users\\ethan\\Desktop\\test_dir",
-    //);
-
-    minimax_v_external(
+    player_v_external(
         &GameState::default(),
-        &MinimaxBuilder::default().max_depth(Some(0)),
         Player::Two,
         ExternalInterface::Minimal,
         "C:\\Users\\ethan\\Desktop\\test_dir",
     );
+
+    //minimax_v_external(
+    //    &GameState::default(),
+    //    &MinimaxBuilder::default().max_depth(Some(8)),
+    //    Player::Two,
+    //    ExternalInterface::Minimal,
+    //    "C:\\Users\\ethan\\Desktop\\test_dir",
+    //);
 }
 
 // TODO: Maybe, we should have the datasets just return Tensors instead of individual example structs.
