@@ -13,12 +13,12 @@ fn main() {
     //player_v_player_default();
     //player_v_minimax_default(Player::One);
     let minimax = MinimaxBuilder::new()
-        .max_depth(Some(24))
+        .max_depth(None)
         .iterative_deepening(true)
-        .max_time(Some(time::Duration::from_secs(4)));
-    //player_v_minimax(&GameState::default(), &minimax, Player::One);
-    let result = minimax.build().search_utility(&GameState::default());
-    println!("{:?}", result);
+        .max_time(Some(time::Duration::from_secs(3)));
+    player_v_minimax(&GameState::default(), &minimax, Player::One);
+    //let result = minimax.build().search_utility(&GameState::default());
+    //println!("{:?}", result);
     //mancalamax::ui::gui::make_gui();
     //println!("{:?}", GameState::default().valid_moves());
 

@@ -328,9 +328,10 @@ impl<const N: usize> MancalaDataset<GameState<N>> {
                 data.push(MancalaExample::new(
                     state,
                     result
-                        .best_moves
+                        .best_moves()
                         .into_iter()
-                        .zip(result.utilities)
+                        .zip(result.utilities())
+                        .map(|(m, u)| (*m, *u))
                         .collect(),
                 ));
                 n_moves += 1;

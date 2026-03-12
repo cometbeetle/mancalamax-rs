@@ -36,9 +36,11 @@ impl<T: Mancala> MinimaxBuilder<T> {
     /// [`None`] means no search depth limit.
     ///
     /// <div class="warning">
-    /// If None is selected, and max_time is also set to
-    /// None, the algorithm will not terminate unless all states have been searched,
+    ///
+    /// If [`None`] is selected, and [`max_time`][`Self::max_time`] is also set to
+    /// [`None`], the algorithm will not terminate unless all states have been searched,
     /// which may take an intractable amount of time.
+    ///
     /// </div>
     pub fn max_depth(mut self, depth: Option<usize>) -> Self {
         self.max_depth = depth;
@@ -50,9 +52,11 @@ impl<T: Mancala> MinimaxBuilder<T> {
     /// [`None`] means no time limit.
     ///
     /// <div class="warning">
-    /// If None is selected, and max_depth is also set to
-    /// None, the algorithm will not terminate unless all states have been searched,
+    ///
+    /// If [`None`] is selected, and [`max_depth`][Self::max_depth] is also set to
+    /// [`None`], the algorithm will not terminate unless all states have been searched,
     /// which may take an intractable amount of time.
+    ///
     /// </div>
     pub fn max_time(mut self, time: Option<Duration>) -> Self {
         self.max_time = time;
@@ -60,6 +64,9 @@ impl<T: Mancala> MinimaxBuilder<T> {
     }
 
     /// Set whether iterative deepening should be used.
+    ///
+    /// Enables returning the deepest search result from minimax if
+    /// time expires before the depth limit is reached.
     pub fn iterative_deepening(mut self, enabled: bool) -> Self {
         self.iterative_deepening = enabled;
         self

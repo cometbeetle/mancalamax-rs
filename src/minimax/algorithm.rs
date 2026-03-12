@@ -7,29 +7,76 @@ use std::time::{Duration, Instant};
 
 /// Helper enum to store the results of minimax searches.
 enum InternalResult {
-    Success(Move, f32),
-    Evaluated(f32),
+    Success {
+        best_move: Move,
+        utility: f32,
+        exact: bool,
+    },
+    Evaluated {
+        utility: f32,
+        exact: bool,
+    },
     Timeout,
 }
 
 /// Stores the value of a minimax search result.
+///
+/// If the [`exact`][Self::exact] field is [`true`], then the heuristic
+/// was never used in finding the current result (i.e., the search evaluated all
+/// possible terminal states).
 #[derive(Debug, Clone)]
 pub struct SearchResult {
-    pub best_move: Move,
-    pub utility: f32,
-    pub depth_searched: Option<usize>,
+    best_move: Move,
+    utility: f32,
+    depth_searched: Option<usize>,
+    exact: bool,
+}
+
+impl SearchResult {
+    pub fn best_move(&self) -> Move {
+        self.best_move
+    }
+    pub fn utility(&self) -> f32 {
+        self.utility
+    }
+    pub fn depth_searched(&self) -> Option<usize> {
+        self.depth_searched
+    }
+    pub fn exact(&self) -> bool {
+        self.exact
+    }
 }
 
 /// Stores the value of a minimax search result involving multiple moves.
+///
+/// If the [`exact`][Self::exact] field is [`true`], then the heuristic
+/// was never used in finding the current result (i.e., the search evaluated all
+/// possible terminal states).
 ///
 /// Each [`Move`] in the [`best_moves`][Self::best_moves] field has a
 /// corresponding utility value in the [`utilities`][Self::utilities] field
 /// at the same index.
 #[derive(Debug, Clone)]
 pub struct MultiSearchResult {
-    pub best_moves: Vec<Move>,
-    pub utilities: Vec<f32>,
-    pub depth_searched: Option<usize>,
+    best_moves: Vec<Move>,
+    utilities: Vec<f32>,
+    depth_searched: Option<usize>,
+    exact: bool,
+}
+
+impl MultiSearchResult {
+    pub fn best_moves(&self) -> &Vec<Move> {
+        &self.best_moves
+    }
+    pub fn utilities(&self) -> &Vec<f32> {
+        &self.utilities
+    }
+    pub fn depth_searched(&self) -> Option<usize> {
+        self.depth_searched
+    }
+    pub fn exact(&self) -> bool {
+        self.exact
+    }
 }
 
 /// Stores the necessary information for executing the minimax algorithm on a
@@ -97,24 +144,38 @@ impl<T: Mancala> Minimax<T> {
         let mut best_move: Option<Move> = None;
         let mut utility = f32::NEG_INFINITY;
         let mut depth_searched: Option<usize> = self.max_depth;
+        let mut fully_searched = false;
 
         if self.iterative_deepening {
             for limit in 1usize.. {
-                depth_searched = Some(limit);
-                if self.max_depth.is_some_and(|d| limit > d) || self.time_exceeded() {
+                if fully_searched
+                    || self.max_depth.is_some_and(|d| limit > d)
+                    || self.time_exceeded()
+                {
                     break;
                 }
-                (best_move, utility) =
+                (best_move, utility, fully_searched) =
                     match self.max_value(state, f32::NEG_INFINITY, f32::INFINITY, 0, Some(limit)) {
-                        InternalResult::Success(m, v) => (Some(m), v),
+                        InternalResult::Success {
+                            best_move: m,
+                            utility: v,
+                            exact: c,
+                        } => {
+                            depth_searched = Some(limit);
+                            (Some(m), v, c)
+                        }
                         _ => break,
                     };
             }
         } else {
-            (best_move, utility) =
+            (best_move, utility, fully_searched) =
                 match self.max_value(state, f32::NEG_INFINITY, f32::INFINITY, 0, self.max_depth) {
-                    InternalResult::Success(m, v) => (Some(m), v),
-                    _ => (None, utility),
+                    InternalResult::Success {
+                        best_move: m,
+                        utility: v,
+                        exact: c,
+                    } => (Some(m), v, c),
+                    _ => (None, utility, fully_searched),
                 }
         }
 
@@ -126,6 +187,7 @@ impl<T: Mancala> Minimax<T> {
                 best_move: m,
                 utility,
                 depth_searched,
+                exact: fully_searched,
             }),
         }
     }
@@ -148,23 +210,12 @@ impl<T: Mancala> Minimax<T> {
                     break;
                 }
                 result = match self.max_value_all(state, 0, Some(limit)) {
-                    Some(r) => Some(MultiSearchResult {
-                        best_moves: r.iter().map(|(m, _)| m.clone()).collect(),
-                        utilities: r.iter().map(|(_, v)| v.clone()).collect(),
-                        depth_searched: Some(limit),
-                    }),
+                    Some(r) => Some(r),
                     None => break,
                 };
             }
         } else {
-            result = match self.max_value_all(state, 0, self.max_depth) {
-                Some(r) => Some(MultiSearchResult {
-                    best_moves: r.iter().map(|(m, _)| m.clone()).collect(),
-                    utilities: r.iter().map(|(_, v)| v.clone()).collect(),
-                    depth_searched: self.max_depth,
-                }),
-                None => None,
-            }
+            result = self.max_value_all(state, 0, self.max_depth);
         };
 
         self.start_time.set(None);
@@ -199,7 +250,7 @@ impl<T: Mancala> Minimax<T> {
         state: &T,
         depth: usize,
         limit: Option<usize>,
-    ) -> Option<Vec<(Move, f32)>> {
+    ) -> Option<MultiSearchResult> {
         debug_assert_ne!(
             self.start_time.get(),
             None,
@@ -212,27 +263,39 @@ impl<T: Mancala> Minimax<T> {
         }
 
         let depth = depth + 1;
-        let mut move_utils: Vec<(Move, f32)> = Vec::new();
+        let mut move_util_exact: Vec<(Move, f32, bool)> = Vec::new();
 
         for m in self.order_moves(state) {
             let new_state = state.make_move(m).unwrap();
-            let utility = {
+            let (utility, exact) = {
                 let result = if new_state.current_turn() == state.current_turn() {
                     self.max_value(&new_state, f32::NEG_INFINITY, f32::INFINITY, depth, limit)
                 } else {
                     self.min_value(&new_state, f32::NEG_INFINITY, f32::INFINITY, depth, limit)
                 };
                 match result {
-                    InternalResult::Success(_, v) => v,
-                    InternalResult::Evaluated(v) => v,
+                    InternalResult::Success {
+                        utility: v,
+                        exact: c,
+                        ..
+                    } => (v, c),
+                    InternalResult::Evaluated {
+                        utility: v,
+                        exact: c,
+                    } => (v, c),
                     InternalResult::Timeout => return None,
                 }
             };
 
-            move_utils.push((m, utility));
+            move_util_exact.push((m, utility, exact));
         }
 
-        Some(move_utils)
+        Some(MultiSearchResult {
+            best_moves: move_util_exact.iter().map(|(m, _, _)| m.clone()).collect(),
+            utilities: move_util_exact.iter().map(|(_, v, _)| v.clone()).collect(),
+            depth_searched: limit,
+            exact: move_util_exact.iter().all(|(_, _, c)| *c),
+        })
     }
 
     /// Maximize the utility / heuristic for a given state, and return the
@@ -253,12 +316,18 @@ impl<T: Mancala> Minimax<T> {
 
         // If we are in a terminal state, evaluate utility.
         if state.is_over() {
-            return InternalResult::Evaluated(self.evaluate(state));
+            return InternalResult::Evaluated {
+                utility: self.evaluate(state),
+                exact: true,
+            };
         }
 
         // If we have reached the artificial limit, use the heuristic.
         if limit.is_some_and(|d| depth >= d) {
-            return InternalResult::Evaluated(self.get_heuristic(state));
+            return InternalResult::Evaluated {
+                utility: self.get_heuristic(state),
+                exact: false,
+            };
         }
 
         // If the time has expired, return nothing.
@@ -270,18 +339,27 @@ impl<T: Mancala> Minimax<T> {
         let mut alpha = alpha;
         let mut v = f32::NEG_INFINITY;
         let mut best_move: Option<Move> = None;
+        let mut exact = true;
 
         for m in self.order_moves(state) {
             let new_state = state.make_move(m).unwrap();
-            let v2 = {
+            let (v2, local_exact) = {
                 let result = if new_state.current_turn() == state.current_turn() {
                     self.max_value(&new_state, alpha, beta, depth, limit)
                 } else {
                     self.min_value(&new_state, alpha, beta, depth, limit)
                 };
                 match result {
-                    InternalResult::Success(_, v) => v,
-                    InternalResult::Evaluated(v) => v,
+                    InternalResult::Success {
+                        utility: v,
+                        exact: c,
+                        ..
+                    } => (v, c),
+                    InternalResult::Evaluated {
+                        utility: v,
+                        exact: c,
+                        ..
+                    } => (v, c),
                     InternalResult::Timeout => return InternalResult::Timeout,
                 }
             };
@@ -289,21 +367,31 @@ impl<T: Mancala> Minimax<T> {
             if v2 > v {
                 v = v2;
                 best_move = Some(m);
-                alpha = if alpha > v { alpha } else { v };
+                alpha = alpha.max(v);
             }
+
+            exact &= local_exact;
 
             // Alpha > beta ==> prune
             if v >= beta {
                 return match best_move {
-                    None => InternalResult::Evaluated(v),
-                    Some(m) => InternalResult::Success(m, v),
+                    None => InternalResult::Evaluated { utility: v, exact },
+                    Some(m) => InternalResult::Success {
+                        best_move: m,
+                        utility: v,
+                        exact,
+                    },
                 };
             }
         }
 
         match best_move {
-            None => InternalResult::Evaluated(v),
-            Some(m) => InternalResult::Success(m, v),
+            None => InternalResult::Evaluated { utility: v, exact },
+            Some(m) => InternalResult::Success {
+                best_move: m,
+                utility: v,
+                exact,
+            },
         }
     }
 
@@ -325,12 +413,18 @@ impl<T: Mancala> Minimax<T> {
 
         // If we are in a terminal state, evaluate utility.
         if state.is_over() {
-            return InternalResult::Evaluated(self.evaluate(state));
+            return InternalResult::Evaluated {
+                utility: self.evaluate(state),
+                exact: true,
+            };
         }
 
         // If we have reached the artificial limit, use the heuristic.
         if limit.is_some_and(|d| depth >= d) {
-            return InternalResult::Evaluated(self.get_heuristic(state));
+            return InternalResult::Evaluated {
+                utility: self.get_heuristic(state),
+                exact: false,
+            };
         }
 
         // If the time has expired, return nothing.
@@ -342,18 +436,26 @@ impl<T: Mancala> Minimax<T> {
         let mut beta = beta;
         let mut v = f32::INFINITY;
         let mut best_move: Option<Move> = None;
+        let mut exact = true;
 
         for m in self.order_moves(state) {
             let new_state = state.make_move(m).unwrap();
-            let v2 = {
+            let (v2, local_exact) = {
                 let result = if new_state.current_turn() == state.current_turn() {
                     self.min_value(&new_state, alpha, beta, depth, limit)
                 } else {
                     self.max_value(&new_state, alpha, beta, depth, limit)
                 };
                 match result {
-                    InternalResult::Success(_, v) => v,
-                    InternalResult::Evaluated(v) => v,
+                    InternalResult::Success {
+                        utility: v,
+                        exact: c,
+                        ..
+                    } => (v, c),
+                    InternalResult::Evaluated {
+                        utility: v,
+                        exact: c,
+                    } => (v, c),
                     InternalResult::Timeout => return InternalResult::Timeout,
                 }
             };
@@ -361,21 +463,31 @@ impl<T: Mancala> Minimax<T> {
             if v2 < v {
                 v = v2;
                 best_move = Some(m);
-                beta = if beta < v { beta } else { v };
+                beta = beta.min(v);
             }
+
+            exact &= local_exact;
 
             // Alpha > beta ==> prune
             if v <= alpha {
                 return match best_move {
-                    None => InternalResult::Evaluated(v),
-                    Some(m) => InternalResult::Success(m, v),
+                    None => InternalResult::Evaluated { utility: v, exact },
+                    Some(m) => InternalResult::Success {
+                        best_move: m,
+                        utility: v,
+                        exact,
+                    },
                 };
             }
         }
 
         match best_move {
-            None => InternalResult::Evaluated(v),
-            Some(m) => InternalResult::Success(m, v),
+            None => InternalResult::Evaluated { utility: v, exact },
+            Some(m) => InternalResult::Success {
+                best_move: m,
+                utility: v,
+                exact,
+            },
         }
     }
 }

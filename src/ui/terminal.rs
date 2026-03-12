@@ -1,7 +1,7 @@
 //! Components for the terminal user interface.
 
 use crate::game::{GameOutcome, GameState, Mancala, Move, Player};
-use crate::minimax::MinimaxBuilder;
+use crate::minimax::{Minimax, MinimaxBuilder};
 use regex::Regex;
 use std::fs;
 use std::fs::OpenOptions;
@@ -78,6 +78,57 @@ impl ExternalInterface {
             }
         }
     }
+}
+
+/// Helper function for making moves selected by minimax, or, if no moves
+/// are found, making a random move.
+fn minimax_or_random_move<T: Mancala>(s: &T, m: &Minimax<T>) -> T {
+    struct MoveResult {
+        chosen_move: Move,
+        utility: f32,
+        depth_searched: Option<usize>,
+        exact: bool,
+        random: bool,
+    }
+
+    // Attempt to find move via minimax.
+    let (s, result) = match m.search_utility(&s) {
+        // Use the minimax move.
+        Some(r) => {
+            let new_s = s.make_move(r.best_move()).unwrap();
+            let r = MoveResult {
+                chosen_move: r.best_move(),
+                utility: r.utility(),
+                depth_searched: r.depth_searched(),
+                exact: r.exact(),
+                random: false,
+            };
+            (new_s, r)
+        }
+        // Use a random move.
+        None => {
+            let (new_s, chosen_move) = s.make_move_rand().unwrap();
+            let r = MoveResult {
+                chosen_move,
+                utility: f32::NAN,
+                depth_searched: None,
+                exact: false,
+                random: true,
+            };
+            (new_s, r)
+        }
+    };
+    println!("MINIMAX SELECTED: {:?}", result.chosen_move);
+    let confidence = if result.random {
+        "Random"
+    } else if result.exact {
+        "Exact"
+    } else {
+        "Estimated"
+    };
+    println!("EXPECTED UTILITY: {} ({})", result.utility, confidence);
+    println!("SEARCH DEPTH:     {}\n", result.depth_searched.unwrap_or(0));
+    s
 }
 
 /// Helper function for collecting valid user inputs via standard input.
@@ -194,12 +245,7 @@ pub fn player_v_minimax<T: Mancala>(
     while !s.is_over() {
         println!("{}", s);
         if s.current_turn() == minimax_player {
-            let chosen_move: Move;
-            (s, chosen_move) = match minimax.search(&s) {
-                Some(m) => (s.make_move(m).unwrap(), m),
-                None => s.make_move_rand().unwrap(),
-            };
-            println!("MINIMAX SELECTED: {:?}\n", chosen_move);
+            s = minimax_or_random_move(&s, &minimax);
         } else {
             s = s.make_move(user_move_input(&s)).unwrap();
             println!();
@@ -265,21 +311,20 @@ pub fn minimax_v_minimax<T: Mancala>(
     let minimax1 = minimax1.build();
     let minimax2 = minimax2.build();
 
+    // Helper closure.
+    let make_move = |m: &Minimax<T>, s: &T| match m.search(&s) {
+        Some(m) => (s.make_move(m).unwrap(), m),
+        None => s.make_move_rand().unwrap(),
+    };
+
     while !s.is_over() {
         println!("{}", s);
+        let chosen_move: Move;
         if s.current_turn() == Player::One {
-            let chosen_move: Move;
-            (s, chosen_move) = match minimax1.search(&s) {
-                Some(m) => (s.make_move(m).unwrap(), m),
-                None => s.make_move_rand().unwrap(),
-            };
+            (s, chosen_move) = make_move(&minimax1, &s);
             println!("MINIMAX 1 SELECTED: {:?}\n", chosen_move);
         } else {
-            let chosen_move: Move;
-            (s, chosen_move) = match minimax2.search(&s) {
-                Some(m) => (s.make_move(m).unwrap(), m),
-                None => s.make_move_rand().unwrap(),
-            };
+            (s, chosen_move) = make_move(&minimax2, &s);
             println!("MINIMAX 2 SELECTED: {:?}\n", chosen_move);
         }
     }
@@ -384,12 +429,7 @@ pub fn minimax_v_external<T: Mancala, P: AsRef<Path>>(
             println!("EXTERNAL SELECTED: {:?}\n", chosen_move);
             current_move += 1;
         } else {
-            let chosen_move: Move;
-            (s, chosen_move) = match minimax.search(&s) {
-                Some(m) => (s.make_move(m).unwrap(), m),
-                None => s.make_move_rand().unwrap(),
-            };
-            println!("MINIMAX SELECTED: {:?}\n", chosen_move);
+            s = minimax_or_random_move(&s, &minimax);
         }
     }
 
