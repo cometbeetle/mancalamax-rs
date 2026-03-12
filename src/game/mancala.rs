@@ -235,6 +235,7 @@ pub trait Mancala: Clone + Display + Send + Sync + Hash + PartialEq + Eq {
                 new_state.rotate_board();
                 new_state.switch_turn();
                 *new_state.ply_mut() += 1;
+                new_state.set_p2_moved(true);
                 return Ok(new_state);
             }
             Move::Pit(pit) => {
@@ -246,7 +247,7 @@ pub trait Mancala: Clone + Display + Send + Sync + Hash + PartialEq + Eq {
         };
 
         // Ensure swap move is only available on Player 2's first move.
-        if !new_state.p2_moved() && new_state.current_turn() == Player::Two {
+        if new_state.swap_allowed() {
             new_state.set_p2_moved(true);
         }
 

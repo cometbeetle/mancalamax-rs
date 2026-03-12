@@ -128,12 +128,6 @@ impl<T: Mancala> Minimax<T> {
                 depth_searched,
             }),
         }
-
-        // TODO: Test the performance against the previous version to make sure it's still fast.
-
-        // TODO: Then, need to find best way to implement transposition table
-        //       without intractable space requirements. Maybe we can start the search
-        //       from the latest state in the table to avoid recalculating all previous depths.
     }
 
     /// Search for all possible moves and their utilities using the minimax algorithm

@@ -73,6 +73,10 @@ fn main() {
     */
 }
 
+// TODO: Need to find best way to implement transposition table with iterative deepening
+//       without intractable space requirements. Maybe we can start the search
+//       from the latest state in the table to avoid recalculating all previous depths.
+
 // TODO: Maybe, we should have the datasets just return Tensors instead of individual example structs.
 // TODO: Might make more efficient for training? Focus on Python for now though.
 
