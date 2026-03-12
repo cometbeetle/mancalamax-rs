@@ -311,8 +311,8 @@ impl<const N: usize> MancalaDataset<GameState<N>> {
                 let mut state = GameState::new(4, 0, 0, Player::One, 1, false);
                 for _ in 0..n_moves {
                     (state, _) = match state.make_move_rand() {
-                        Some(t) => t,
-                        None => break,
+                        Ok(t) => t,
+                        Err(..) => break,
                     }
                 }
 
@@ -323,10 +323,16 @@ impl<const N: usize> MancalaDataset<GameState<N>> {
 
                 // Compute the optimal move and utility for that state for the current player.
                 let minimax = minimax.clone().optimize_for(state.current_turn()).build();
-                let utilities = minimax.search_utility_all(&state).unwrap();
+                let result = minimax.search_utility_all(&state).unwrap();
 
-                data.push(MancalaExample::new(state, utilities));
-
+                data.push(MancalaExample::new(
+                    state,
+                    result
+                        .best_moves
+                        .into_iter()
+                        .zip(result.utilities)
+                        .collect(),
+                ));
                 n_moves += 1;
             }
             data

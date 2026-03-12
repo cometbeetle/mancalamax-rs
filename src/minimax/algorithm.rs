@@ -5,6 +5,33 @@ use crate::game::{Mancala, Move, Player};
 use std::cell::Cell;
 use std::time::{Duration, Instant};
 
+/// Helper enum to store the results of minimax searches.
+enum InternalResult {
+    Success(Move, f32),
+    Evaluated(f32),
+    Timeout,
+}
+
+/// Stores the value of a minimax search result.
+#[derive(Debug, Clone)]
+pub struct SearchResult {
+    pub best_move: Move,
+    pub utility: f32,
+    pub depth_searched: Option<usize>,
+}
+
+/// Stores the value of a minimax search result involving multiple moves.
+///
+/// Each [`Move`] in the [`best_moves`][Self::best_moves] field has a
+/// corresponding utility value in the [`utilities`][Self::utilities] field
+/// at the same index.
+#[derive(Debug, Clone)]
+pub struct MultiSearchResult {
+    pub best_moves: Vec<Move>,
+    pub utilities: Vec<f32>,
+    pub depth_searched: Option<usize>,
+}
+
 /// Stores the necessary information for executing the minimax algorithm on a
 /// Mancala board state in order to determine the most optimal move (i.e.,
 /// the one that maximizes utility, or is calculated as best based on some heuristic).
@@ -13,6 +40,7 @@ pub struct Minimax<T: Mancala> {
     pub(super) optimize_for: Player,
     pub(super) max_depth: Option<usize>,
     pub(super) max_time: Option<Duration>,
+    pub(super) iterative_deepening: bool,
     pub(super) move_orderer: MoveOrderFn<T>,
     pub(super) evaluator: StateEvalFn<T>,
     pub(super) heuristic: StateEvalFn<T>,
@@ -33,6 +61,11 @@ impl<T: Mancala> Minimax<T> {
     /// Returns the set maximum search time.
     pub fn max_time(&self) -> Option<Duration> {
         self.max_time
+    }
+
+    /// Returns the set maximum search time.
+    pub fn iterative_deepening(&self) -> bool {
+        self.iterative_deepening
     }
 
     /// Returns the start time (if currently running) of the algorithm.
@@ -58,17 +91,49 @@ impl<T: Mancala> Minimax<T> {
     /// Search for the optimal move using the minimax algorithm and
     /// alpha-beta pruning, based on the set configuration parameters.
     ///
-    /// Returns a pair of (move, utility).
-    ///
     /// If no move was found successfully, returns [`None`].
-    pub fn search_utility(&self, state: &T) -> Option<(Move, f32)> {
+    pub fn search_utility(&self, state: &T) -> Option<SearchResult> {
         self.start_time.set(Some(Instant::now()));
-        let (best_move, utility) = self.max_value(state, f32::NEG_INFINITY, f32::INFINITY, 0);
+        let mut best_move: Option<Move> = None;
+        let mut utility = f32::NEG_INFINITY;
+        let mut depth_searched: Option<usize> = self.max_depth;
+
+        if self.iterative_deepening {
+            for limit in 1usize.. {
+                depth_searched = Some(limit);
+                if self.max_depth.is_some_and(|d| limit > d) || self.time_exceeded() {
+                    break;
+                }
+                (best_move, utility) =
+                    match self.max_value(state, f32::NEG_INFINITY, f32::INFINITY, 0, Some(limit)) {
+                        InternalResult::Success(m, v) => (Some(m), v),
+                        _ => break,
+                    };
+            }
+        } else {
+            (best_move, utility) =
+                match self.max_value(state, f32::NEG_INFINITY, f32::INFINITY, 0, self.max_depth) {
+                    InternalResult::Success(m, v) => (Some(m), v),
+                    _ => (None, utility),
+                }
+        }
+
         self.start_time.set(None);
+
         match best_move {
             None => None,
-            Some(m) => Some((m, utility)),
+            Some(m) => Some(SearchResult {
+                best_move: m,
+                utility,
+                depth_searched,
+            }),
         }
+
+        // TODO: Test the performance against the previous version to make sure it's still fast.
+
+        // TODO: Then, need to find best way to implement transposition table
+        //       without intractable space requirements. Maybe we can start the search
+        //       from the latest state in the table to avoid recalculating all previous depths.
     }
 
     /// Search for all possible moves and their utilities using the minimax algorithm
@@ -78,12 +143,36 @@ impl<T: Mancala> Minimax<T> {
     /// disabled for the first call to the utility maximizer. This decreases performance
     /// by a significant amount.
     ///
-    /// Returns a vector of (move, utility) pairs.
-    ///
     /// If no moves could be successfully evaluated, returns [`None`].
-    pub fn search_utility_all(&self, state: &T) -> Option<Vec<(Move, f32)>> {
+    pub fn search_utility_all(&self, state: &T) -> Option<MultiSearchResult> {
         self.start_time.set(Some(Instant::now()));
-        let result = self.max_value_all(state, 0);
+        let mut result: Option<MultiSearchResult> = None;
+
+        if self.iterative_deepening {
+            for limit in 1usize.. {
+                if self.max_depth.is_some_and(|d| limit > d) || self.time_exceeded() {
+                    break;
+                }
+                result = match self.max_value_all(state, 0, Some(limit)) {
+                    Some(r) => Some(MultiSearchResult {
+                        best_moves: r.iter().map(|(m, _)| m.clone()).collect(),
+                        utilities: r.iter().map(|(_, v)| v.clone()).collect(),
+                        depth_searched: Some(limit),
+                    }),
+                    None => break,
+                };
+            }
+        } else {
+            result = match self.max_value_all(state, 0, self.max_depth) {
+                Some(r) => Some(MultiSearchResult {
+                    best_moves: r.iter().map(|(m, _)| m.clone()).collect(),
+                    utilities: r.iter().map(|(_, v)| v.clone()).collect(),
+                    depth_searched: self.max_depth,
+                }),
+                None => None,
+            }
+        };
+
         self.start_time.set(None);
         result
     }
@@ -96,14 +185,14 @@ impl<T: Mancala> Minimax<T> {
     ///
     /// If no move was found successfully, returns [`None`].
     pub fn search(&self, state: &T) -> Option<Move> {
-        self.search_utility(state).map(|(m, _)| m)
+        self.search_utility(state).map(|r| r.best_move)
     }
 
     /// Determines whether the algorithm has been running longer than requested.
     ///
     /// Used internally inside [`max_value`] and [`min_value`].
     fn time_exceeded(&self) -> bool {
-        match (self.start_time(), self.max_time) {
+        match (self.start_time.get(), self.max_time) {
             (Some(start), Some(max)) => Instant::now() - start >= max,
             _ => false,
         }
@@ -111,15 +200,20 @@ impl<T: Mancala> Minimax<T> {
 
     /// Maximize the utility / heuristic for a given state, and return a vector
     /// of (move, utility) pairs that do so.
-    fn max_value_all(&self, state: &T, depth: usize) -> Option<Vec<(Move, f32)>> {
-        assert_ne!(
+    fn max_value_all(
+        &self,
+        state: &T,
+        depth: usize,
+        limit: Option<usize>,
+    ) -> Option<Vec<(Move, f32)>> {
+        debug_assert_ne!(
             self.start_time.get(),
             None,
             "Minimax search must be started with `search_utility_all()` before calling `max_value_all`"
         );
 
         // Stop if in a terminal state, or the artificial limit is exceeded.
-        if state.is_over() || self.max_depth.is_some_and(|d| depth >= d) || self.time_exceeded() {
+        if state.is_over() || limit.is_some_and(|d| depth >= d) || self.time_exceeded() {
             return None;
         }
 
@@ -128,11 +222,19 @@ impl<T: Mancala> Minimax<T> {
 
         for m in self.order_moves(state) {
             let new_state = state.make_move(m).unwrap();
-            let (_, utility) = if new_state.current_turn() == state.current_turn() {
-                self.max_value(&new_state, f32::NEG_INFINITY, f32::INFINITY, depth)
-            } else {
-                self.min_value(&new_state, f32::NEG_INFINITY, f32::INFINITY, depth)
+            let utility = {
+                let result = if new_state.current_turn() == state.current_turn() {
+                    self.max_value(&new_state, f32::NEG_INFINITY, f32::INFINITY, depth, limit)
+                } else {
+                    self.min_value(&new_state, f32::NEG_INFINITY, f32::INFINITY, depth, limit)
+                };
+                match result {
+                    InternalResult::Success(_, v) => v,
+                    InternalResult::Evaluated(v) => v,
+                    InternalResult::Timeout => return None,
+                }
             };
+
             move_utils.push((m, utility));
         }
 
@@ -141,8 +243,15 @@ impl<T: Mancala> Minimax<T> {
 
     /// Maximize the utility / heuristic for a given state, and return the
     /// (move, utility) pair that does so.
-    fn max_value(&self, state: &T, alpha: f32, beta: f32, depth: usize) -> (Option<Move>, f32) {
-        assert_ne!(
+    fn max_value(
+        &self,
+        state: &T,
+        alpha: f32,
+        beta: f32,
+        depth: usize,
+        limit: Option<usize>,
+    ) -> InternalResult {
+        debug_assert_ne!(
             self.start_time.get(),
             None,
             "Minimax search must be started with `search_utility()` before calling `max_value`"
@@ -150,12 +259,17 @@ impl<T: Mancala> Minimax<T> {
 
         // If we are in a terminal state, evaluate utility.
         if state.is_over() {
-            return (None, self.evaluate(state));
+            return InternalResult::Evaluated(self.evaluate(state));
         }
 
         // If we have reached the artificial limit, use the heuristic.
-        if self.max_depth.is_some_and(|d| depth >= d) || self.time_exceeded() {
-            return (None, self.get_heuristic(state));
+        if limit.is_some_and(|d| depth >= d) {
+            return InternalResult::Evaluated(self.get_heuristic(state));
+        }
+
+        // If the time has expired, return nothing.
+        if self.time_exceeded() {
+            return InternalResult::Timeout;
         }
 
         let depth = depth + 1;
@@ -165,10 +279,17 @@ impl<T: Mancala> Minimax<T> {
 
         for m in self.order_moves(state) {
             let new_state = state.make_move(m).unwrap();
-            let (_, v2) = if new_state.current_turn() == state.current_turn() {
-                self.max_value(&new_state, alpha, beta, depth)
-            } else {
-                self.min_value(&new_state, alpha, beta, depth)
+            let v2 = {
+                let result = if new_state.current_turn() == state.current_turn() {
+                    self.max_value(&new_state, alpha, beta, depth, limit)
+                } else {
+                    self.min_value(&new_state, alpha, beta, depth, limit)
+                };
+                match result {
+                    InternalResult::Success(_, v) => v,
+                    InternalResult::Evaluated(v) => v,
+                    InternalResult::Timeout => return InternalResult::Timeout,
+                }
             };
 
             if v2 > v {
@@ -179,30 +300,48 @@ impl<T: Mancala> Minimax<T> {
 
             // Alpha > beta ==> prune
             if v >= beta {
-                return (best_move, v);
+                return match best_move {
+                    None => InternalResult::Evaluated(v),
+                    Some(m) => InternalResult::Success(m, v),
+                };
             }
         }
 
-        (best_move, v)
+        match best_move {
+            None => InternalResult::Evaluated(v),
+            Some(m) => InternalResult::Success(m, v),
+        }
     }
 
     /// Minimize the utility / heuristic for a given state, and return the
     /// (move, utility) pair that does so.
-    fn min_value(&self, state: &T, alpha: f32, beta: f32, depth: usize) -> (Option<Move>, f32) {
-        assert_ne!(
-            self.start_time(),
+    fn min_value(
+        &self,
+        state: &T,
+        alpha: f32,
+        beta: f32,
+        depth: usize,
+        limit: Option<usize>,
+    ) -> InternalResult {
+        debug_assert_ne!(
+            self.start_time.get(),
             None,
             "Minimax search must be started with `search_utility()` before calling `min_value`"
         );
 
         // If we are in a terminal state, evaluate utility.
         if state.is_over() {
-            return (None, self.evaluate(state));
+            return InternalResult::Evaluated(self.evaluate(state));
         }
 
         // If we have reached the artificial limit, use the heuristic.
-        if self.max_depth.is_some_and(|d| depth >= d) || self.time_exceeded() {
-            return (None, self.get_heuristic(state));
+        if limit.is_some_and(|d| depth >= d) {
+            return InternalResult::Evaluated(self.get_heuristic(state));
+        }
+
+        // If the time has expired, return nothing.
+        if self.time_exceeded() {
+            return InternalResult::Timeout;
         }
 
         let depth = depth + 1;
@@ -212,10 +351,17 @@ impl<T: Mancala> Minimax<T> {
 
         for m in self.order_moves(state) {
             let new_state = state.make_move(m).unwrap();
-            let (_, v2) = if new_state.current_turn() == state.current_turn() {
-                self.min_value(&new_state, alpha, beta, depth)
-            } else {
-                self.max_value(&new_state, alpha, beta, depth)
+            let v2 = {
+                let result = if new_state.current_turn() == state.current_turn() {
+                    self.min_value(&new_state, alpha, beta, depth, limit)
+                } else {
+                    self.max_value(&new_state, alpha, beta, depth, limit)
+                };
+                match result {
+                    InternalResult::Success(_, v) => v,
+                    InternalResult::Evaluated(v) => v,
+                    InternalResult::Timeout => return InternalResult::Timeout,
+                }
             };
 
             if v2 < v {
@@ -226,10 +372,16 @@ impl<T: Mancala> Minimax<T> {
 
             // Alpha > beta ==> prune
             if v <= alpha {
-                return (best_move, v);
+                return match best_move {
+                    None => InternalResult::Evaluated(v),
+                    Some(m) => InternalResult::Success(m, v),
+                };
             }
         }
 
-        (best_move, v)
+        match best_move {
+            None => InternalResult::Evaluated(v),
+            Some(m) => InternalResult::Success(m, v),
+        }
     }
 }

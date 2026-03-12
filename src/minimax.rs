@@ -4,7 +4,7 @@
 pub mod algorithm;
 pub mod builder;
 
-pub use algorithm::Minimax;
+pub use algorithm::{Minimax, MultiSearchResult, SearchResult};
 pub use builder::MinimaxBuilder;
 
 use crate::game::{Move, Player};

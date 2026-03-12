@@ -11,6 +11,7 @@ pub struct MinimaxBuilder<T: Mancala> {
     optimize_for: Player,
     max_depth: Option<usize>,
     max_time: Option<Duration>,
+    iterative_deepening: bool,
     move_orderer: MoveOrderFn<T>,
     evaluator: StateEvalFn<T>,
     heuristic: StateEvalFn<T>,
@@ -58,6 +59,12 @@ impl<T: Mancala> MinimaxBuilder<T> {
         self
     }
 
+    /// Set whether iterative deepening should be used.
+    pub fn iterative_deepening(mut self, enabled: bool) -> Self {
+        self.iterative_deepening = enabled;
+        self
+    }
+
     /// Set the move ordering function.
     ///
     /// This function is used for each state checked by minimax, and
@@ -93,6 +100,7 @@ impl<T: Mancala> MinimaxBuilder<T> {
             optimize_for: self.optimize_for,
             max_depth: self.max_depth,
             max_time: self.max_time,
+            iterative_deepening: self.iterative_deepening,
             move_orderer: self.move_orderer,
             evaluator: self.evaluator,
             heuristic: self.heuristic,
@@ -133,6 +141,7 @@ impl<T: Mancala> Default for MinimaxBuilder<T> {
             optimize_for: Player::One,
             max_depth: Some(12),
             max_time: None,
+            iterative_deepening: false,
             move_orderer,
             evaluator,
             heuristic,

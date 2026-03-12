@@ -222,7 +222,7 @@ pub trait Mancala: Clone + Display + Send + Sync + Hash + PartialEq + Eq {
     /// Note that, in the implementation, we do not explicitly check if the
     /// selected move is in [`valid_moves`][Self::valid_moves]. This improves
     /// performance by skipping unnecessary [`Vec`] allocations.
-    fn make_move(&self, selection: Move) -> Option<Self> {
+    fn make_move(&self, selection: Move) -> Result<Self, ()> {
         // Make a copy of the current state.
         let mut new_state = self.clone();
 
@@ -230,16 +230,16 @@ pub trait Mancala: Clone + Display + Send + Sync + Hash + PartialEq + Eq {
             // Handle swap inputs.
             Move::Swap => {
                 if !new_state.swap_allowed() {
-                    return None;
+                    return Err(());
                 }
                 new_state.rotate_board();
                 new_state.switch_turn();
                 *new_state.ply_mut() += 1;
-                return Some(new_state);
+                return Ok(new_state);
             }
             Move::Pit(pit) => {
                 if pit < 1 || pit > new_state.pits() {
-                    return None;
+                    return Err(());
                 }
                 pit
             }
@@ -261,7 +261,7 @@ pub trait Mancala: Clone + Display + Send + Sync + Hash + PartialEq + Eq {
 
         // Ensure selected pit had stones in it.
         if stones == 0 {
-            return None;
+            return Err(());
         }
 
         // Initialize turn variables.
@@ -349,27 +349,27 @@ pub trait Mancala: Clone + Display + Send + Sync + Hash + PartialEq + Eq {
 
         *new_state.ply_mut() += 1;
 
-        Some(new_state)
+        Ok(new_state)
     }
 
     /// Helper method to select a pit move without the encapsulating enum.
-    fn make_move_pit(&self, pit: usize) -> Option<Self> {
+    fn make_move_pit(&self, pit: usize) -> Result<Self, ()> {
         self.make_move(Move::Pit(pit))
     }
 
     /// Helper method to select the swap move without the encapsulating enum.
-    fn make_move_swap(&self) -> Option<Self> {
+    fn make_move_swap(&self) -> Result<Self, ()> {
         self.make_move(Move::Swap)
     }
 
     /// Make a random move, selected from the available moves.
     ///
     /// Returns a pair of (new_state, selected_move).
-    fn make_move_rand(&self) -> Option<(Self, Move)> {
+    fn make_move_rand(&self) -> Result<(Self, Move), ()> {
         let mut rng = rand::rng();
         match self.valid_moves().choose(&mut rng) {
             Some(m) => self.make_move(*m).map(|s| (s, *m)),
-            None => None,
+            None => Err(()),
         }
     }
 

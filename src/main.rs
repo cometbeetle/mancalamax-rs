@@ -7,12 +7,18 @@ use mancalamax::ui::{
     ExternalInterface, minimax_v_external, minimax_v_minimax, player_v_external, player_v_minimax,
     player_v_minimax_default, player_v_player_default,
 };
+use std::time;
 
 fn main() {
     //player_v_player_default();
     //player_v_minimax_default(Player::One);
-    //let minimax = MinimaxBuilder::new().max_depth(Some(18));
+    let minimax = MinimaxBuilder::new()
+        .max_depth(Some(24))
+        .iterative_deepening(true)
+        .max_time(Some(time::Duration::from_secs(4)));
     //player_v_minimax(&GameState::default(), &minimax, Player::One);
+    let result = minimax.build().search_utility(&GameState::default());
+    println!("{:?}", result);
     //mancalamax::ui::gui::make_gui();
     //println!("{:?}", GameState::default().valid_moves());
 
@@ -37,6 +43,7 @@ fn main() {
     //    "C:\\Users\\ethan\\Desktop\\test_dir",
     //);
 
+    /*
     let mut gnn_wins = Vec::new();
     let mut minimax_wins = Vec::new();
     for _ in 0..500 {
@@ -63,6 +70,7 @@ fn main() {
 
     println!("GNN WINS: {:?}", gnn_wins);
     println!("MINIMAX-12 WINS: {:?}", minimax_wins)
+    */
 }
 
 // TODO: Maybe, we should have the datasets just return Tensors instead of individual example structs.
