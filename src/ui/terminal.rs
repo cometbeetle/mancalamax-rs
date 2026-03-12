@@ -3,8 +3,7 @@
 use crate::game::{GameOutcome, GameState, Mancala, Move, Player};
 use crate::minimax::{Minimax, MinimaxBuilder};
 use regex::Regex;
-use std::fs;
-use std::fs::OpenOptions;
+use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::Path;
 use std::thread;
