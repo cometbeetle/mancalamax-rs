@@ -1,7 +1,7 @@
 //! Components for the terminal user interface.
 
 use crate::game::{GameOutcome, GameState, Mancala, Move, Player};
-use crate::minimax::{Minimax, MinimaxBuilder};
+use crate::minimax::{Minimax, MinimaxBuilder, TTHash};
 use regex::Regex;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
@@ -79,9 +79,232 @@ impl ExternalInterface {
     }
 }
 
+/// Start a terminal-based game of Mancala between a player and a specified
+/// minimax algorithm based on an initial state.
+pub fn player_v_minimax<T: Mancala + TTHash<T>>(
+    initial_state: &T,
+    minimax_builder: &MinimaxBuilder<T>,
+    minimax_player: Player,
+) -> T {
+    let mut s = initial_state.clone();
+    let minimax = minimax_builder.build();
+
+    while !s.is_over() {
+        println!("{}", s);
+        if s.current_turn() == minimax_player {
+            s = minimax_or_random_move(&s, &minimax, "MINIMAX");
+        } else {
+            s = s.make_move(user_move_input(&s)).unwrap();
+            println!();
+        }
+    }
+
+    match s.outcome() {
+        GameOutcome::Winner(player) if player == minimax_player => {
+            println!("{}\nWINNER: MINIMAX", s)
+        }
+        GameOutcome::Winner(player) if player != minimax_player => {
+            println!("{}\nWINNER: PLAYER {}", s, usize::from(player))
+        }
+        GameOutcome::Tie => println!("{}\nWINNER: TIE", s),
+        _ => println!("{}\nWINNER: N/A", s),
+    }
+
+    s
+}
+
+/// Start a terminal-based game of Mancala between a player and the default
+/// minimax algorithm specified by [`MinimaxBuilder::default`], using the
+/// default game state specified by [`GameState::default`].
+pub fn player_v_minimax_default(minimax_player: Player) -> GameState<6> {
+    let minimax_builder = MinimaxBuilder::new().optimize_for(minimax_player);
+    player_v_minimax(&GameState::default(), &minimax_builder, minimax_player)
+}
+
+/// Start a terminal-based game of Mancala between two players based on
+/// an initial board state.
+pub fn player_v_player<T: Mancala>(initial_state: &T) -> T {
+    let mut s = initial_state.clone();
+
+    while !s.is_over() {
+        println!("{}", s);
+        s = s.make_move(user_move_input(&s)).unwrap();
+        println!();
+    }
+
+    match s.outcome() {
+        GameOutcome::Winner(player) => println!("{}\nWINNER: PLAYER {}", s, usize::from(player)),
+        GameOutcome::Tie => println!("{}\nWINNER: TIE", s),
+        _ => println!("{}\nWINNER: N/A", s),
+    }
+
+    s
+}
+
+/// Start a terminal-based game of Mancala between two players based on
+/// the default game state specified by [`GameState::default`].
+pub fn player_v_player_default() -> GameState<6> {
+    player_v_player(&GameState::default())
+}
+
+/// Start a terminal-based game of Mancala between two minimax opponents
+/// based on an initial state.
+pub fn minimax_v_minimax<T: Mancala + TTHash<T>>(
+    initial_state: &T,
+    minimax1: &MinimaxBuilder<T>,
+    minimax2: &MinimaxBuilder<T>,
+) -> T {
+    let mut s = initial_state.clone();
+    let minimax1 = minimax1.build();
+    let minimax2 = minimax2.build();
+
+    while !s.is_over() {
+        println!("{}", s);
+        if s.current_turn() == Player::One {
+            s = minimax_or_random_move(&s, &minimax1, "MINIMAX 1");
+        } else {
+            s = minimax_or_random_move(&s, &minimax2, "MINIMAX 2");
+        }
+    }
+
+    match s.outcome() {
+        GameOutcome::Winner(player) if player == Player::One => {
+            println!("{}\nWINNER: MINIMAX PLAYER 1", s)
+        }
+        GameOutcome::Winner(player) if player == Player::Two => {
+            println!("{}\nWINNER: MINIMAX PLAYER 2", s)
+        }
+        GameOutcome::Tie => println!("{}\nWINNER: TIE", s),
+        _ => println!("{}\nWINNER: N/A", s),
+    }
+
+    s
+}
+
+/// Start a terminal-based game of Mancala between a player and an external
+/// agent, using the selected communication interface and directory. A supplied
+/// starting state is used.
+pub fn player_v_external<T: Mancala, P: AsRef<Path>>(
+    initial_state: &T,
+    external_player: Player,
+    interface: ExternalInterface,
+    comm_dir: P,
+) -> T {
+    let mut s = initial_state.clone();
+    let mut current_move = 0usize;
+    let comm_dir = comm_dir.as_ref();
+
+    // Create communication directory if it does not exist.
+    fs::create_dir_all(comm_dir).unwrap();
+
+    // Reset directory.
+    external_reset(comm_dir);
+
+    while !s.is_over() {
+        println!("{}", s);
+        if s.current_turn() == external_player {
+            let chosen_move = external_move_input(&s, interface, comm_dir, current_move);
+            s = s.make_move(chosen_move).unwrap();
+            println!("EXTERNAL SELECTED: {:?}\n", chosen_move);
+            current_move += 1;
+        } else {
+            s = s.make_move(user_move_input(&s)).unwrap();
+            println!();
+        }
+    }
+
+    match s.outcome() {
+        GameOutcome::Winner(player) if player == external_player => {
+            println!("{}\nWINNER: EXTERNAL AGENT", s)
+        }
+        GameOutcome::Winner(player) if player != external_player => {
+            println!("{}\nWINNER: PLAYER {}", s, usize::from(player))
+        }
+        GameOutcome::Tie => println!("{}\nWINNER: TIE", s),
+        _ => println!("{}\nWINNER: N/A", s),
+    }
+
+    s
+}
+
+/// Start a terminal-based game of Mancala between a player and an external
+/// agent, using the selected communication interface and directory. The
+/// default starting state is used.
+pub fn player_v_external_default<P: AsRef<Path>>(
+    external_player: Player,
+    interface: ExternalInterface,
+    comm_dir: P,
+) -> GameState<6> {
+    player_v_external(&GameState::default(), external_player, interface, comm_dir)
+}
+
+/// Start a terminal-based game of Mancala between minimax and an external
+/// agent, using the selected communication interface and directory. A supplied
+/// starting state and minimax configuration are used.
+pub fn minimax_v_external<T: Mancala + TTHash<T>, P: AsRef<Path>>(
+    initial_state: &T,
+    minimax_builder: &MinimaxBuilder<T>,
+    external_player: Player,
+    interface: ExternalInterface,
+    comm_dir: P,
+) -> T {
+    let mut s = initial_state.clone();
+    let minimax = minimax_builder.build();
+    let mut current_move = 0usize;
+    let comm_dir = comm_dir.as_ref();
+
+    // Create communication directory if it does not exist.
+    fs::create_dir_all(comm_dir).unwrap();
+
+    // Reset directory.
+    external_reset(comm_dir);
+
+    while !s.is_over() {
+        println!("{}", s);
+        if s.current_turn() == external_player {
+            let chosen_move = external_move_input(&s, interface, comm_dir, current_move);
+            s = s.make_move(chosen_move).unwrap();
+            println!("EXTERNAL SELECTED: {:?}\n", chosen_move);
+            current_move += 1;
+        } else {
+            s = minimax_or_random_move(&s, &minimax, "MINIMAX");
+        }
+    }
+
+    match s.outcome() {
+        GameOutcome::Winner(player) if player == external_player => {
+            println!("{}\nWINNER: EXTERNAL AGENT", s)
+        }
+        GameOutcome::Winner(player) if player != external_player => {
+            println!("{}\nWINNER: MINIMAX", s)
+        }
+        GameOutcome::Tie => println!("{}\nWINNER: TIE", s),
+        _ => println!("{}\nWINNER: N/A", s),
+    }
+
+    s
+}
+
+/// Start a terminal-based game of Mancala between minimax and an external
+/// agent, using the selected communication interface and directory. The default
+/// starting state and minimax configuration are used.
+pub fn minimax_v_external_default<P: AsRef<Path>>(
+    external_player: Player,
+    interface: ExternalInterface,
+    comm_dir: P,
+) -> GameState<6> {
+    minimax_v_external(
+        &GameState::default(),
+        &MinimaxBuilder::default(),
+        external_player,
+        interface,
+        comm_dir,
+    )
+}
+
 /// Helper function for making moves selected by minimax, or, if no moves
 /// are found, making a random move.
-fn minimax_or_random_move<T: Mancala>(s: &T, m: &Minimax<T>) -> T {
+fn minimax_or_random_move<T: Mancala + TTHash<T>>(s: &T, m: &Minimax<T>, name: &str) -> T {
     struct MoveResult {
         chosen_move: Move,
         utility: f32,
@@ -117,7 +340,21 @@ fn minimax_or_random_move<T: Mancala>(s: &T, m: &Minimax<T>) -> T {
             (new_s, r)
         }
     };
-    println!("MINIMAX SELECTED: {:?}", result.chosen_move);
+
+    let label_selected = format!("{} SELECTED:", name);
+    let label_expected = "EXPECTED UTILITY:".to_string();
+    let label_depth = "SEARCH DEPTH:".to_string();
+    let label_width = [&label_selected, &label_expected, &label_depth]
+        .iter()
+        .map(|s| s.len())
+        .max()
+        .unwrap();
+    println!(
+        "{:<width$} {:?}",
+        label_selected,
+        result.chosen_move,
+        width = label_width
+    );
     let confidence = if result.random {
         "Random"
     } else if result.exact {
@@ -125,8 +362,19 @@ fn minimax_or_random_move<T: Mancala>(s: &T, m: &Minimax<T>) -> T {
     } else {
         "Estimated"
     };
-    println!("EXPECTED UTILITY: {} ({})", result.utility, confidence);
-    println!("SEARCH DEPTH:     {}\n", result.depth_searched.unwrap_or(0));
+    println!(
+        "{:<width$} {} ({})",
+        label_expected,
+        result.utility,
+        confidence,
+        width = label_width
+    );
+    println!(
+        "{:<width$} {}\n",
+        label_depth,
+        result.depth_searched.unwrap_or(0),
+        width = label_width
+    );
     s
 }
 
@@ -229,236 +477,4 @@ fn external_reset<P: AsRef<Path>>(comm_dir: P) {
         .create(true)
         .open(comm_dir.as_ref().join("RESET.txt"))
         .expect("Failed to create file");
-}
-
-/// Start a terminal-based game of Mancala between a player and a specified
-/// minimax algorithm based on an initial state.
-pub fn player_v_minimax<T: Mancala>(
-    initial_state: &T,
-    minimax_builder: &MinimaxBuilder<T>,
-    minimax_player: Player,
-) -> T {
-    let mut s = initial_state.clone();
-    let minimax = minimax_builder.build();
-
-    while !s.is_over() {
-        println!("{}", s);
-        if s.current_turn() == minimax_player {
-            s = minimax_or_random_move(&s, &minimax);
-        } else {
-            s = s.make_move(user_move_input(&s)).unwrap();
-            println!();
-        }
-    }
-
-    match s.outcome() {
-        GameOutcome::Winner(player) if player == minimax_player => {
-            println!("{}\nWINNER: MINIMAX", s)
-        }
-        GameOutcome::Winner(player) if player != minimax_player => {
-            println!("{}\nWINNER: PLAYER {}", s, usize::from(player))
-        }
-        GameOutcome::Tie => println!("{}\nWINNER: TIE", s),
-        _ => println!("{}\nWINNER: N/A", s),
-    }
-
-    s
-}
-
-/// Start a terminal-based game of Mancala between a player and the default
-/// minimax algorithm specified by [`MinimaxBuilder::default`], using the
-/// default game state specified by [`GameState::default`].
-pub fn player_v_minimax_default(minimax_player: Player) -> GameState<6> {
-    let minimax_builder = MinimaxBuilder::new().optimize_for(minimax_player);
-    player_v_minimax(&GameState::default(), &minimax_builder, minimax_player)
-}
-
-/// Start a terminal-based game of Mancala between two players based on
-/// an initial board state.
-pub fn player_v_player<T: Mancala>(initial_state: &T) -> T {
-    let mut s = initial_state.clone();
-
-    while !s.is_over() {
-        println!("{}", s);
-        s = s.make_move(user_move_input(&s)).unwrap();
-        println!();
-    }
-
-    match s.outcome() {
-        GameOutcome::Winner(player) => println!("{}\nWINNER: PLAYER {}", s, usize::from(player)),
-        GameOutcome::Tie => println!("{}\nWINNER: TIE", s),
-        _ => println!("{}\nWINNER: N/A", s),
-    }
-
-    s
-}
-
-/// Start a terminal-based game of Mancala between two players based on
-/// the default game state specified by [`GameState::default`].
-pub fn player_v_player_default() -> GameState<6> {
-    player_v_player(&GameState::default())
-}
-
-/// Start a terminal-based game of Mancala between two minimax opponents
-/// based on an initial state.
-pub fn minimax_v_minimax<T: Mancala>(
-    initial_state: &T,
-    minimax1: &MinimaxBuilder<T>,
-    minimax2: &MinimaxBuilder<T>,
-) -> T {
-    let mut s = initial_state.clone();
-    let minimax1 = minimax1.build();
-    let minimax2 = minimax2.build();
-
-    // Helper closure.
-    let make_move = |m: &Minimax<T>, s: &T| match m.search(&s) {
-        Some(m) => (s.make_move(m).unwrap(), m),
-        None => s.make_move_rand().unwrap(),
-    };
-
-    while !s.is_over() {
-        println!("{}", s);
-        let chosen_move: Move;
-        if s.current_turn() == Player::One {
-            (s, chosen_move) = make_move(&minimax1, &s);
-            println!("MINIMAX 1 SELECTED: {:?}\n", chosen_move);
-        } else {
-            (s, chosen_move) = make_move(&minimax2, &s);
-            println!("MINIMAX 2 SELECTED: {:?}\n", chosen_move);
-        }
-    }
-
-    match s.outcome() {
-        GameOutcome::Winner(player) if player == Player::One => {
-            println!("{}\nWINNER: MINIMAX PLAYER 1", s)
-        }
-        GameOutcome::Winner(player) if player != Player::Two => {
-            println!("{}\nWINNER: MINIMAX PLAYER 1", s)
-        }
-        GameOutcome::Tie => println!("{}\nWINNER: TIE", s),
-        _ => println!("{}\nWINNER: N/A", s),
-    }
-
-    s
-}
-
-/// Start a terminal-based game of Mancala between a player and an external
-/// agent, using the selected communication interface and directory. A supplied
-/// starting state is used.
-pub fn player_v_external<T: Mancala, P: AsRef<Path>>(
-    initial_state: &T,
-    external_player: Player,
-    interface: ExternalInterface,
-    comm_dir: P,
-) -> T {
-    let mut s = initial_state.clone();
-    let mut current_move = 0usize;
-    let comm_dir = comm_dir.as_ref();
-
-    // Create communication directory if it does not exist.
-    fs::create_dir_all(comm_dir).unwrap();
-
-    // Reset directory.
-    external_reset(comm_dir);
-
-    while !s.is_over() {
-        println!("{}", s);
-        if s.current_turn() == external_player {
-            let chosen_move = external_move_input(&s, interface, comm_dir, current_move);
-            s = s.make_move(chosen_move).unwrap();
-            println!("EXTERNAL SELECTED: {:?}\n", chosen_move);
-            current_move += 1;
-        } else {
-            s = s.make_move(user_move_input(&s)).unwrap();
-            println!();
-        }
-    }
-
-    match s.outcome() {
-        GameOutcome::Winner(player) if player == external_player => {
-            println!("{}\nWINNER: EXTERNAL AGENT", s)
-        }
-        GameOutcome::Winner(player) if player != external_player => {
-            println!("{}\nWINNER: PLAYER {}", s, usize::from(player))
-        }
-        GameOutcome::Tie => println!("{}\nWINNER: TIE", s),
-        _ => println!("{}\nWINNER: N/A", s),
-    }
-
-    s
-}
-
-/// Start a terminal-based game of Mancala between a player and an external
-/// agent, using the selected communication interface and directory. The
-/// default starting state is used.
-pub fn player_v_external_default<P: AsRef<Path>>(
-    external_player: Player,
-    interface: ExternalInterface,
-    comm_dir: P,
-) -> GameState<6> {
-    player_v_external(&GameState::default(), external_player, interface, comm_dir)
-}
-
-/// Start a terminal-based game of Mancala between minimax and an external
-/// agent, using the selected communication interface and directory. A supplied
-/// starting state and minimax configuration are used.
-pub fn minimax_v_external<T: Mancala, P: AsRef<Path>>(
-    initial_state: &T,
-    minimax_builder: &MinimaxBuilder<T>,
-    external_player: Player,
-    interface: ExternalInterface,
-    comm_dir: P,
-) -> T {
-    let mut s = initial_state.clone();
-    let minimax = minimax_builder.build();
-    let mut current_move = 0usize;
-    let comm_dir = comm_dir.as_ref();
-
-    // Create communication directory if it does not exist.
-    fs::create_dir_all(comm_dir).unwrap();
-
-    // Reset directory.
-    external_reset(comm_dir);
-
-    while !s.is_over() {
-        println!("{}", s);
-        if s.current_turn() == external_player {
-            let chosen_move = external_move_input(&s, interface, comm_dir, current_move);
-            s = s.make_move(chosen_move).unwrap();
-            println!("EXTERNAL SELECTED: {:?}\n", chosen_move);
-            current_move += 1;
-        } else {
-            s = minimax_or_random_move(&s, &minimax);
-        }
-    }
-
-    match s.outcome() {
-        GameOutcome::Winner(player) if player == external_player => {
-            println!("{}\nWINNER: EXTERNAL AGENT", s)
-        }
-        GameOutcome::Winner(player) if player != external_player => {
-            println!("{}\nWINNER: MINIMAX", s)
-        }
-        GameOutcome::Tie => println!("{}\nWINNER: TIE", s),
-        _ => println!("{}\nWINNER: N/A", s),
-    }
-
-    s
-}
-
-/// Start a terminal-based game of Mancala between minimax and an external
-/// agent, using the selected communication interface and directory. The default
-/// starting state and minimax configuration are used.
-pub fn minimax_v_external_default<P: AsRef<Path>>(
-    external_player: Player,
-    interface: ExternalInterface,
-    comm_dir: P,
-) -> GameState<6> {
-    minimax_v_external(
-        &GameState::default(),
-        &MinimaxBuilder::default(),
-        external_player,
-        interface,
-        comm_dir,
-    )
 }

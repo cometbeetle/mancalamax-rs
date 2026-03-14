@@ -13,10 +13,15 @@ fn main() {
     //player_v_player_default();
     //player_v_minimax_default(Player::One);
     let minimax = MinimaxBuilder::new()
-        .max_depth(None)
+        .max_depth(Some(18))
         .iterative_deepening(true)
-        .max_time(Some(time::Duration::from_secs(3)));
-    player_v_minimax(&GameState::default(), &minimax, Player::One);
+        .use_t_table(true)
+        .max_time(Some(time::Duration::from_secs(100)));
+    minimax_v_minimax(
+        &GameState::default(),
+        &minimax,
+        &minimax.optimize_for(Player::Two),
+    );
     //let result = minimax.build().search_utility(&GameState::default());
     //println!("{:?}", result);
     //mancalamax::ui::gui::make_gui();
@@ -73,9 +78,9 @@ fn main() {
     */
 }
 
-// TODO: Need to find best way to implement transposition table with iterative deepening
-//       without intractable space requirements. Maybe we can start the search
-//       from the latest state in the table to avoid recalculating all previous depths.
+// TODO: Need to make transposition table EFFICIENT!
+
+// TODO: Also still need to make sure it's correct, and not slower than before.
 
 // TODO: Maybe, we should have the datasets just return Tensors instead of individual example structs.
 // TODO: Might make more efficient for training? Focus on Python for now though.

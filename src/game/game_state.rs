@@ -1,9 +1,11 @@
 //! Definitions and implementations for statically sized Mancala game states.
 
-use super::common::fmt_common;
+use super::common::{fmt_common, tt_eq_common, tt_hash_common};
 use super::dyn_game_state::DynGameState;
 use super::mancala::{Mancala, Player};
+use crate::minimax::TTHash;
 use std::fmt::{Display, Formatter};
+use std::hash::{Hash, Hasher};
 
 /// Stores the necessary components of a Mancala game, including the board,
 /// each player's store, the current ply, and the player currently allowed to move.
@@ -14,7 +16,7 @@ use std::fmt::{Display, Formatter};
 /// (i.e., during the execution of the minimax algorithm).
 ///
 /// Implements the [`Mancala`] trait, and can be converted to and from
-/// [`DynGameState`] structs.
+/// [`DynGameState`] structs. Also implements [`TTHash`] for use with minimax.
 ///
 /// If the `serde` feature is enabled, this struct will be serializable and
 /// deserializable, via automatic conversion to and from [`DynGameState`].
@@ -231,4 +233,27 @@ impl<const N: usize> GameState<N> {
             p2_moved,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct HashWrapper<const N: usize>(GameState<N>);
+
+impl<const N: usize> Hash for HashWrapper<N> {
+    tt_hash_common!();
+}
+
+impl<const N: usize> PartialEq for HashWrapper<N> {
+    tt_eq_common!();
+}
+
+impl<const N: usize> Eq for HashWrapper<N> {}
+
+impl<'a, const N: usize> From<&'a GameState<N>> for HashWrapper<N> {
+    fn from(value: &'a GameState<N>) -> Self {
+        Self(value.clone())
+    }
+}
+
+impl<const N: usize> TTHash<Self> for GameState<N> {
+    type HashWrapper = HashWrapper<N>;
 }

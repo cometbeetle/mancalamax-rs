@@ -1,9 +1,11 @@
 //! Definitions and implementations for dynamically sized Mancala game states.
 
-use super::common::fmt_common;
+use super::common::{fmt_common, tt_hash_common, tt_eq_common};
 use super::game_state::GameState;
 use super::mancala::{Mancala, Player};
+use crate::minimax::TTHash;
 use std::fmt::{Display, Formatter};
+use std::hash::{Hash, Hasher};
 
 /// Stores the necessary components of a Mancala game, including the board,
 /// each player's store, the current ply, and the player currently allowed to move.
@@ -12,7 +14,7 @@ use std::fmt::{Display, Formatter};
 /// is not known at compile time.
 ///
 /// Implements the [`Mancala`] trait, and can be converted to and from
-/// [`GameState`] structs.
+/// [`GameState`] structs. Also implements [`TTHash`] for use with minimax.
 ///
 /// If the `serde` feature is enabled, this struct will be serializable and
 /// deserializable.
@@ -178,4 +180,27 @@ impl DynGameState {
             p2_moved,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct HashWrapper(DynGameState);
+
+impl Hash for HashWrapper {
+    tt_hash_common!();
+}
+
+impl PartialEq for HashWrapper {
+    tt_eq_common!();
+}
+
+impl Eq for HashWrapper {}
+
+impl<'a> From<&'a DynGameState> for HashWrapper {
+    fn from(value: &'a DynGameState) -> Self {
+        Self(value.clone())
+    }
+}
+
+impl TTHash<Self> for DynGameState {
+    type HashWrapper = HashWrapper;
 }

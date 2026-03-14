@@ -56,6 +56,16 @@ impl From<usize> for Player {
     }
 }
 
+impl Player {
+    /// Returns the other of the two players.
+    pub fn other(&self) -> Player {
+        match *self {
+            Player::One => Player::Two,
+            Player::Two => Player::One,
+        }
+    }
+}
+
 /// Represents one of the two types of move during Mancala gameplay.
 ///
 /// Players can either select a pit from which to distribute stones, or,
@@ -149,8 +159,19 @@ pub trait Mancala: Clone + Display + Send + Sync + Hash + PartialEq + Eq {
     }
 
     /// Gets the current score for a player.
-    fn score(&self, player: Player) -> isize {
-        self.stores()[player] as isize
+    fn score(&self, player: Player) -> usize {
+        self.stores()[player]
+    }
+
+    /// Gets the number of stones in a given pit for a given player.
+    ///
+    /// Returns [`None`] if the pit is invalid.
+    fn pit_balance(&self, player: Player, pit: usize) -> Option<usize> {
+        if pit > 0 && pit <= self.pits() {
+            Some(self.board()[player].as_ref()[pit - 1])
+        } else {
+            None
+        }
     }
 
     /// Determines the current outcome of the game.
@@ -196,15 +217,24 @@ pub trait Mancala: Clone + Display + Send + Sync + Hash + PartialEq + Eq {
         moves
     }
 
+    /// Checks whether the specified move is valid for the current player.
+    fn is_valid_move(&self, m: Move) -> bool {
+        match m {
+            Move::Pit(pit)
+                if self
+                    .pit_balance(self.current_turn(), pit)
+                    .is_some_and(|b| b > 0) =>
+            {
+                true
+            }
+            Move::Pit(_) => false,
+            Move::Swap => self.swap_allowed(),
+        }
+    }
+
     /// Switches the current turn. Used inside [`make_move`][Self::make_move].
-    fn switch_turn(&mut self) -> Player {
-        let turn = *self.current_turn_mut();
-        *self.current_turn_mut() = if turn == Player::One {
-            Player::Two
-        } else {
-            Player::One
-        };
-        *self.current_turn_mut()
+    fn switch_turn(&mut self) {
+        *self.current_turn_mut() = self.current_turn().other();
     }
 
     /// Rotates the board. Used inside [`make_move`][Self::make_move] when the swap move is requested.
@@ -218,47 +248,36 @@ pub trait Mancala: Clone + Display + Send + Sync + Hash + PartialEq + Eq {
     ///
     /// The default implementation of [`make_move`][Self::make_move] roughly
     /// follows the gameplay rules of the "Kalah" variant of Mancala.
-    ///
-    /// Note that, in the implementation, we do not explicitly check if the
-    /// selected move is in [`valid_moves`][Self::valid_moves]. This improves
-    /// performance by skipping unnecessary [`Vec`] allocations.
     fn make_move(&self, selection: Move) -> Result<Self, ()> {
+        // Ensure the move is valid.
+        if !self.is_valid_move(selection) {
+            return Err(());
+        }
+
         // Make a copy of the current state.
         let mut new_state = self.clone();
 
         let mut pit = match selection {
             // Handle swap inputs.
             Move::Swap => {
-                if !new_state.swap_allowed() {
-                    return Err(());
-                }
                 new_state.rotate_board();
                 new_state.switch_turn();
                 *new_state.ply_mut() += 1;
                 new_state.set_p2_moved(true);
                 return Ok(new_state);
             }
-            Move::Pit(pit) => {
-                if pit < 1 || pit > new_state.pits() {
-                    return Err(());
-                }
-                pit
-            }
+            Move::Pit(pit) => pit,
         };
 
         // Ensure swap move is only available on Player 2's first move.
-        if new_state.swap_allowed() {
+        if new_state.current_turn() == Player::Two {
             new_state.set_p2_moved(true);
         }
 
         // Get current player, find adjusted pit index, and collect number of stones to distribute.
         let mut side = new_state.current_turn();
-        let stones = {
-            let player_side = new_state.board_mut()[side].as_mut();
-            let stones = player_side[pit - 1];
-            player_side[pit - 1] = 0;
-            stones
-        };
+        let stones = new_state.pit_balance(side, pit).unwrap();
+        new_state.board_mut()[side].as_mut()[pit - 1] = 0;
 
         // Ensure selected pit had stones in it.
         if stones == 0 {
@@ -285,11 +304,7 @@ pub trait Mancala: Clone + Display + Send + Sync + Hash + PartialEq + Eq {
                 }
 
                 // Switch board sides.
-                side = if side == Player::One {
-                    Player::Two
-                } else {
-                    Player::One
-                };
+                side = side.other();
                 pit = 0;
 
                 // If we did not add to the store, make sure to add one to the next player's pit.
@@ -308,10 +323,9 @@ pub trait Mancala: Clone + Display + Send + Sync + Hash + PartialEq + Eq {
                 && side == new_state.current_turn()
                 && new_state.board()[side].as_ref()[pit] == 1
             {
-                let to_capture = if side == Player::One {
-                    [pit, new_state.pits() - pit - 1]
-                } else {
-                    [new_state.pits() - pit - 1, pit]
+                let to_capture = match side {
+                    Player::One => [pit, new_state.pits() - pit - 1],
+                    Player::Two => [new_state.pits() - pit - 1, pit],
                 };
 
                 new_state.stores_mut()[side] += new_state.board()[0].as_ref()[to_capture[0]];
@@ -325,11 +339,21 @@ pub trait Mancala: Clone + Display + Send + Sync + Hash + PartialEq + Eq {
         }
 
         // Detect completed game.
-        let final_stone_recipient: Option<usize> = {
-            if new_state.board()[0].as_ref().iter().sum::<usize>() == 0 {
-                Some(1)
-            } else if new_state.board()[1].as_ref().iter().sum::<usize>() == 0 {
-                Some(0)
+        let final_stone_recipient: Option<Player> = {
+            if new_state.board()[Player::One]
+                .as_ref()
+                .iter()
+                .sum::<usize>()
+                == 0
+            {
+                Some(Player::Two)
+            } else if new_state.board()[Player::Two]
+                .as_ref()
+                .iter()
+                .sum::<usize>()
+                == 0
+            {
+                Some(Player::One)
             } else {
                 None
             }

@@ -51,3 +51,31 @@ pub(super) fn fmt_common(f: &mut Formatter, state: &impl Mancala, title: &str) -
     writeln!(f, "{}", valid_str)?;
     Ok(())
 }
+
+/// Helper macro for implementing the transposition table hash function.
+macro_rules! tt_hash_common {
+    () => {
+        fn hash<H: Hasher>(&self, state: &mut H) {
+            self.0.board.hash(state);
+            self.0.stores.hash(state);
+            self.0.current_turn.hash(state);
+            self.0.p2_moved.hash(state);
+        }
+    };
+}
+
+/// Helper macro for implementing the transition table equality operator.
+///
+/// Used only in [`GameState`] and [`DynGameState`] structs.
+macro_rules! tt_eq_common {
+    () => {
+        fn eq(&self, other: &Self) -> bool {
+            self.0.board == other.0.board
+                && self.0.stores == other.0.stores
+                && self.0.current_turn == other.0.current_turn
+                && self.0.p2_moved == other.0.p2_moved
+        }
+    };
+}
+
+pub(crate) use {tt_eq_common, tt_hash_common};

@@ -1,7 +1,7 @@
 //! Builder utilities for constructing [`Minimax`] instances.
 
 use super::Minimax;
-use super::{MoveOrderFn, StateEvalFn};
+use super::{MoveOrderFn, StateEvalFn, TTHash};
 use crate::game::{Mancala, Move, Player};
 use std::time::Duration;
 
@@ -12,12 +12,13 @@ pub struct MinimaxBuilder<T: Mancala> {
     max_depth: Option<usize>,
     max_time: Option<Duration>,
     iterative_deepening: bool,
+    use_t_table: bool,
     move_orderer: MoveOrderFn<T>,
     evaluator: StateEvalFn<T>,
     heuristic: StateEvalFn<T>,
 }
 
-impl<T: Mancala> MinimaxBuilder<T> {
+impl<T: Mancala + TTHash<T>> MinimaxBuilder<T> {
     /// Construct a new [`MinimaxBuilder`] instance using the default configuration.
     ///
     /// See [`MinimaxBuilder::default`] for details.
@@ -72,6 +73,12 @@ impl<T: Mancala> MinimaxBuilder<T> {
         self
     }
 
+    /// Set whether to use a transposition table during search.
+    pub fn use_t_table(mut self, enabled: bool) -> Self {
+        self.use_t_table = enabled;
+        self
+    }
+
     /// Set the move ordering function.
     ///
     /// This function is used for each state checked by minimax, and
@@ -108,10 +115,12 @@ impl<T: Mancala> MinimaxBuilder<T> {
             max_depth: self.max_depth,
             max_time: self.max_time,
             iterative_deepening: self.iterative_deepening,
+            use_t_table: self.use_t_table,
             move_orderer: self.move_orderer,
             evaluator: self.evaluator,
             heuristic: self.heuristic,
             start_time: None.into(),
+            t_table: Default::default(),
         }
     }
 }
@@ -121,6 +130,8 @@ impl<T: Mancala> Default for MinimaxBuilder<T> {
     /// - `optimize_for`: [`Player::One`]
     /// - `max_depth`: `12`
     /// - `max_time`: [`None`]
+    /// - `iterative_deepening`: [`false`]
+    /// - `use_t_table`: [`false`]
     /// - `move_orderer`: A function that returns the valid moves in descending order by pit number.
     /// - `evaluator`: A function that returns the point differential between
     ///   the players (positive if the current player is winning).
@@ -140,8 +151,8 @@ impl<T: Mancala> Default for MinimaxBuilder<T> {
             moves
         };
         let evaluator = |s: &T, p: Player| match p {
-            Player::One => (s.score(Player::One) - s.score(Player::Two)) as f32,
-            Player::Two => (s.score(Player::Two) - s.score(Player::One)) as f32,
+            Player::One => (s.score(Player::One) as isize - s.score(Player::Two) as isize) as f32,
+            Player::Two => (s.score(Player::Two) as isize - s.score(Player::One) as isize) as f32,
         };
         let heuristic = evaluator;
         Self {
@@ -149,6 +160,7 @@ impl<T: Mancala> Default for MinimaxBuilder<T> {
             max_depth: Some(12),
             max_time: None,
             iterative_deepening: false,
+            use_t_table: false,
             move_orderer,
             evaluator,
             heuristic,
