@@ -1,6 +1,6 @@
 //! Definitions and implementations for dynamically sized Mancala game states.
 
-use super::common::{fmt_common, tt_hash_common, tt_eq_common};
+use super::common::{fmt_common, tt_eq_common, tt_hash_common};
 use super::game_state::GameState;
 use super::mancala::{Mancala, Player};
 use crate::minimax::TTHash;

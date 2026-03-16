@@ -2,8 +2,8 @@
 
 use super::{MoveOrderFn, StateEvalFn};
 use crate::game::{Mancala, Move, Player};
+use rustc_hash::FxHashMap;
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
 use std::hash::Hash;
 use std::time::{Duration, Instant};
 
@@ -87,7 +87,7 @@ pub struct Minimax<T: Mancala + TTHash<T>> {
     pub(super) evaluator: StateEvalFn<T>,
     pub(super) heuristic: StateEvalFn<T>,
     pub(super) start_time: Cell<Option<Instant>>,
-    pub(super) t_table: RefCell<HashMap<T::HashWrapper, TTEntry>>,
+    pub(super) t_table: RefCell<FxHashMap<T::HashWrapper, TTEntry>>,
 }
 
 impl<T: Mancala + TTHash<T>> Minimax<T> {
@@ -252,9 +252,8 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
         depth: usize,
         limit: Option<usize>,
     ) -> Option<MultiSearchResult> {
-        debug_assert_ne!(
-            self.start_time.get(),
-            None,
+        debug_assert!(
+            self.start_time.get().is_some(),
             "Minimax search must be started with `search_utility_all()` before calling `max_value_all`"
         );
 
@@ -309,9 +308,8 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
         depth: usize,
         limit: Option<usize>,
     ) -> InternalResult {
-        debug_assert_ne!(
-            self.start_time.get(),
-            None,
+        debug_assert!(
+            self.start_time.get().is_some(),
             "Minimax search must be started with `search_utility()` before calling `max_value`"
         );
 
@@ -319,7 +317,9 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
         let alpha_orig = alpha;
         let beta_orig = beta;
         let remaining = limit.map(|l| l.saturating_sub(depth)).unwrap_or(usize::MAX);
-        if self.use_t_table && let Some(r) = self.lookup(state, remaining, &mut alpha, &mut beta) {
+        if self.use_t_table
+            && let Some(r) = self.lookup_restrict(state, remaining, &mut alpha, &mut beta)
+        {
             return r;
         }
 
@@ -407,9 +407,8 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
         depth: usize,
         limit: Option<usize>,
     ) -> InternalResult {
-        debug_assert_ne!(
-            self.start_time.get(),
-            None,
+        debug_assert!(
+            self.start_time.get().is_some(),
             "Minimax search must be started with `search_utility()` before calling `min_value`"
         );
 
@@ -417,7 +416,9 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
         let alpha_orig = alpha;
         let beta_orig = beta;
         let remaining = limit.map(|l| l.saturating_sub(depth)).unwrap_or(usize::MAX);
-        if self.use_t_table && let Some(r) = self.lookup(state, remaining, &mut alpha, &mut beta) {
+        if self.use_t_table
+            && let Some(r) = self.lookup_restrict(state, remaining, &mut alpha, &mut beta)
+        {
             return r;
         }
 
@@ -495,7 +496,7 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
     }
 
     /// Helper function to perform a lookup in the transposition table.
-    fn lookup(
+    fn lookup_restrict(
         &self,
         state: &T,
         remaining: usize,
