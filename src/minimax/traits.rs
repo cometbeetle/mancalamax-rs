@@ -1,6 +1,6 @@
 //! Traits used for the minimax algorithm implementation.
 
-use crate::game::{Mancala, Player, Move};
+use crate::game::{Mancala, Move, Player};
 
 /// Enum used to represent an action that should be recorded by the
 /// Zobrist hashing system. Each instance serves as an index into the
@@ -62,13 +62,23 @@ pub trait ZobristHash: Mancala {
 /// Helper function to compare a new state with an old state, and update
 /// its Zobrist hash value accordingly.
 fn perform_updates<T: Mancala + ZobristHash>(old_state: &T, new_state: &mut T) {
-    for player in [Player::One, Player:: Two] {
+    for player in [Player::One, Player::Two] {
         for pit in 0..old_state.pits() {
-            let old = ZobristIdx::Pit(player, pit, old_state.board()[player].as_ref()[pit]);
-            let new = ZobristIdx::Pit(player, pit, new_state.board()[player].as_ref()[pit]);
+            let old_count = old_state.board()[player].as_ref()[pit];
+            let new_count = new_state.board()[player].as_ref()[pit];
+            if old_count == new_count {
+                continue;
+            }
+            let old = ZobristIdx::Pit(player, pit, old_count);
+            let new = ZobristIdx::Pit(player, pit, new_count);
             match new_state.update_zobrist_hash(old, new) {
                 _ => {}
             }
+        }
+        let old_score = old_state.score(player);
+        let new_score = new_state.score(player);
+        if old_score == new_score {
+            continue;
         }
         let old = ZobristIdx::Store(player, old_state.score(player));
         let new = ZobristIdx::Store(player, new_state.score(player));

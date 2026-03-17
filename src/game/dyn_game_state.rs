@@ -3,7 +3,6 @@
 use super::common::fmt_common;
 use super::game_state::GameState;
 use super::mancala::{Mancala, Player};
-use crate::minimax::{ZobristHash, ZobristIdx};
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 

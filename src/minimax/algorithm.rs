@@ -1,6 +1,6 @@
 //! Implementation of the minimax algorithm with alpha-beta pruning for Mancala.
 
-use super::{MoveOrderFn, StateEvalFn, ZobristHash, ZobristIdx};
+use super::{MoveOrderFn, StateEvalFn, ZobristHash};
 use crate::game::{Mancala, Move, Player};
 use rustc_hash::FxHashMap;
 use std::cell::{Cell, RefCell};
