@@ -1,17 +1,10 @@
 //! Implementation of the minimax algorithm with alpha-beta pruning for Mancala.
 
-use super::{MoveOrderFn, StateEvalFn};
+use super::{MoveOrderFn, StateEvalFn, ZobristHash};
 use crate::game::{Mancala, Move, Player};
 use rustc_hash::FxHashMap;
 use std::cell::{Cell, RefCell};
-use std::hash::Hash;
 use std::time::{Duration, Instant};
-
-/// Trait used to specify the wrapper hashing type required by
-/// the minimax transposition table implementation.
-pub trait TTHash<T: Mancala> {
-    type HashWrapper: for<'a> From<&'a T> + Clone + Send + Sync + Hash + PartialEq + Eq;
-}
 
 /// Stores the value of a minimax search result.
 ///
@@ -47,7 +40,7 @@ pub struct MultiSearchResult {
 /// Mancala board state in order to determine the most optimal move (i.e.,
 /// the one that maximizes utility, or is calculated as best based on some heuristic).
 #[derive(Debug, Clone)]
-pub struct Minimax<T: Mancala + TTHash<T>> {
+pub struct Minimax<T: Mancala + ZobristHash> {
     pub(super) optimize_for: Player,
     pub(super) max_depth: Option<usize>,
     pub(super) max_time: Option<Duration>,
@@ -57,10 +50,10 @@ pub struct Minimax<T: Mancala + TTHash<T>> {
     pub(super) evaluator: StateEvalFn<T>,
     pub(super) heuristic: StateEvalFn<T>,
     pub(super) start_time: Cell<Option<Instant>>,
-    pub(super) t_table: RefCell<FxHashMap<T::HashWrapper, TTEntry>>,
+    pub(super) t_table: RefCell<FxHashMap<u64, TTEntry>>,
 }
 
-impl<T: Mancala + TTHash<T>> Minimax<T> {
+impl<T: Mancala + ZobristHash> Minimax<T> {
     /// Returns the player for which minimax will optimize the outcome.
     pub fn optimize_for(&self) -> Player {
         self.optimize_for
@@ -321,37 +314,20 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
 
             // Alpha > beta: prune.
             if v >= beta {
-                if self.use_t_table {
-                    self.tt_store(
-                        state,
-                        alpha_orig,
-                        beta_orig,
-                        v,
-                        remaining,
-                        found_move,
-                        fully_searched,
-                    );
-                }
-                return InternalResult::Node {
-                    found_move,
-                    utility: v,
-                    fully_searched,
-                };
+                break;
             }
         }
 
         // Store results into the transition table, if necessary.
-        if self.use_t_table {
-            self.tt_store(
-                state,
-                alpha_orig,
-                beta_orig,
-                v,
-                remaining,
-                found_move,
-                fully_searched,
-            )
-        }
+        self.tt_store(
+            state,
+            alpha_orig,
+            beta_orig,
+            v,
+            remaining,
+            found_move,
+            fully_searched,
+        );
 
         InternalResult::Node {
             found_move,
@@ -414,37 +390,20 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
 
             // Alpha > beta: prune.
             if v <= alpha {
-                if self.use_t_table {
-                    self.tt_store(
-                        state,
-                        alpha_orig,
-                        beta_orig,
-                        v,
-                        remaining,
-                        found_move,
-                        fully_searched,
-                    );
-                }
-                return InternalResult::Node {
-                    found_move,
-                    utility: v,
-                    fully_searched,
-                };
+                break;
             }
         }
 
         // Store results into the transition table, if necessary.
-        if self.use_t_table {
-            self.tt_store(
-                state,
-                alpha_orig,
-                beta_orig,
-                v,
-                remaining,
-                found_move,
-                fully_searched,
-            )
-        }
+        self.tt_store(
+            state,
+            alpha_orig,
+            beta_orig,
+            v,
+            remaining,
+            found_move,
+            fully_searched,
+        );
 
         InternalResult::Node {
             found_move,
@@ -524,9 +483,15 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
             return None;
         }
 
+        debug_assert!(
+            state.get_zobrist_hash().is_some(),
+            "Zobrist hashing may not be correctly implemented for `{}`",
+            std::any::type_name::<T>()
+        );
+
         self.t_table
             .borrow()
-            .get(&state.into())
+            .get(&state.get_zobrist_hash()?)
             .and_then(|e| e.probe(remaining, alpha, beta))
     }
 
@@ -541,8 +506,18 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
         found_move: Option<Move>,
         terminal: bool,
     ) {
+        if !self.use_t_table {
+            return;
+        }
+
+        debug_assert!(
+            state.get_zobrist_hash().is_some(),
+            "Zobrist hashing may not be correctly implemented for `{}`",
+            std::any::type_name::<T>()
+        );
+
+        let key = state.get_zobrist_hash().unwrap();
         let entry = TTEntry::new(v, remaining, found_move, terminal, alpha_orig, beta_orig);
-        let key = state.into();
         let mut table = self.t_table.borrow_mut();
         if table.get(&key).is_none_or(|old| {
             (entry.remaining >= old.remaining) || (entry.fully_searched && !old.fully_searched)
@@ -556,7 +531,7 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
     fn get_tt_move(&self, state: &T) -> Option<Move> {
         self.t_table
             .borrow()
-            .get(&state.into())
+            .get(&state.get_zobrist_hash()?)
             .and_then(|e| e.found_move)
     }
 
@@ -564,6 +539,11 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
     /// that the transposition entry is tried first, if it exists.
     fn order_moves_with_tt(&self, state: &T) -> Vec<Move> {
         let mut moves = self.order_moves(state);
+
+        if !self.use_t_table {
+            return moves;
+        }
+
         if let Some(tt_move) = self.get_tt_move(state) {
             if let Some(pos) = moves.iter().position(|m| *m == tt_move) {
                 let m = moves.remove(pos);

@@ -1,11 +1,11 @@
 //! Definitions and implementations for dynamically sized Mancala game states.
 
-use super::common::{fmt_common, tt_eq_common, tt_hash_common};
+use super::common::fmt_common;
 use super::game_state::GameState;
 use super::mancala::{Mancala, Player};
-use crate::minimax::TTHash;
+use crate::minimax::ZobristHash;
 use std::fmt::{Display, Formatter};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 /// Stores the necessary components of a Mancala game, including the board,
 /// each player's store, the current ply, and the player currently allowed to move.
@@ -26,6 +26,7 @@ pub struct DynGameState {
     ply: usize,
     current_turn: Player,
     p2_moved: bool,
+    zobrist_hash: u64,
 }
 
 impl Display for DynGameState {
@@ -46,6 +47,7 @@ impl Default for DynGameState {
             ply: 1,
             current_turn: Player::One,
             p2_moved: false,
+            zobrist_hash: 0,
         }
     }
 }
@@ -94,6 +96,8 @@ impl Mancala for DynGameState {
     }
 }
 
+impl ZobristHash for DynGameState {}
+
 impl<const N: usize> From<GameState<N>> for DynGameState {
     fn from(value: GameState<N>) -> Self {
         Self {
@@ -102,6 +106,7 @@ impl<const N: usize> From<GameState<N>> for DynGameState {
             ply: value.ply(),
             current_turn: value.current_turn(),
             p2_moved: value.p2_moved(),
+            zobrist_hash: value.zobrist_hash(),
         }
     }
 }
@@ -124,6 +129,7 @@ impl DynGameState {
             ply,
             current_turn,
             p2_moved,
+            zobrist_hash: 0,
         }
     }
 
@@ -160,6 +166,7 @@ impl DynGameState {
             ply,
             current_turn,
             p2_moved,
+            zobrist_hash: 0,
         }
     }
 
@@ -178,29 +185,12 @@ impl DynGameState {
             ply,
             current_turn,
             p2_moved,
+            zobrist_hash: 0,
         }
     }
-}
 
-#[derive(Debug, Clone)]
-pub struct HashWrapper(DynGameState);
-
-impl Hash for HashWrapper {
-    tt_hash_common!();
-}
-
-impl PartialEq for HashWrapper {
-    tt_eq_common!();
-}
-
-impl Eq for HashWrapper {}
-
-impl<'a> From<&'a DynGameState> for HashWrapper {
-    fn from(value: &'a DynGameState) -> Self {
-        Self(value.clone())
+    /// Returns the current Zobrist hash value stored in the state.
+    pub fn zobrist_hash(&self) -> u64 {
+        self.zobrist_hash
     }
-}
-
-impl TTHash<Self> for DynGameState {
-    type HashWrapper = HashWrapper;
 }

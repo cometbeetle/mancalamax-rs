@@ -13,10 +13,10 @@ fn main() {
     //player_v_player_default();
     //player_v_minimax_default(Player::One);
     let minimax = MinimaxBuilder::new()
-        .max_depth(None)
+        .max_depth(Some(18))
         .iterative_deepening(true)
         .use_t_table(true)
-        .max_time(Some(time::Duration::from_secs(1)));
+        .max_time(None);
     minimax_v_minimax(
         &GameState::default(),
         &minimax,
@@ -77,21 +77,6 @@ fn main() {
     println!("MINIMAX-12 WINS: {:?}", minimax_wins)
     */
 }
-
-// TODO: Need to make transposition table EFFICIENT!
-
-// TODO: Also still need to make sure it's correct, and not slower than before.
-// TODO: See generated notes... may have issues with T Table
-
-// TODO: THE BELOW IDEA ABOUT get_zobrist PROBABLY WON'T WORK. THINK OF BETTER ARCHITECTURE.
-
-// TODO: Implement Zobrist hashing. Can add to Minimax trait. Function make_move can
-//       automatically call a default implementation of an update_hash function, which
-//       looks for "Some" returned by a default impl of a get_zobrist function, which takes
-//       an optional reference to table (we can allocate a 1-D vector at first call to minimax
-//       for locality). Store hash inside any struct that implements Mancala, and add accessor
-//       method to Mancala trait. Can have GameState and DynGameState can just start with 0u64
-//       as the initial hash. No need to compute initial hash.
 
 // TODO: Maybe, we should have the datasets just return Tensors instead of individual example structs.
 // TODO: Might make more efficient for training? Focus on Python for now though.

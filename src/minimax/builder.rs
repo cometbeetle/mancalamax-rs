@@ -1,7 +1,7 @@
 //! Builder utilities for constructing [`Minimax`] instances.
 
 use super::Minimax;
-use super::{MoveOrderFn, StateEvalFn, TTHash};
+use super::{MoveOrderFn, StateEvalFn, ZobristHash};
 use crate::game::{Mancala, Move, Player};
 use std::time::Duration;
 
@@ -18,7 +18,7 @@ pub struct MinimaxBuilder<T: Mancala> {
     heuristic: StateEvalFn<T>,
 }
 
-impl<T: Mancala + TTHash<T>> MinimaxBuilder<T> {
+impl<T: Mancala + ZobristHash> MinimaxBuilder<T> {
     /// Construct a new [`MinimaxBuilder`] instance using the default configuration.
     ///
     /// See [`MinimaxBuilder::default`] for details.

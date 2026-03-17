@@ -3,9 +3,11 @@
 
 pub mod algorithm;
 pub mod builder;
+pub mod traits;
 
-pub use algorithm::{Minimax, MultiSearchResult, SearchResult, TTHash};
+pub use algorithm::{Minimax, MultiSearchResult, SearchResult};
 pub use builder::MinimaxBuilder;
+pub use traits::{ZobristHash, ZobristIdx};
 
 use crate::game::{Move, Player};
 
