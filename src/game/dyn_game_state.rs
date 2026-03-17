@@ -3,7 +3,7 @@
 use super::common::fmt_common;
 use super::game_state::GameState;
 use super::mancala::{Mancala, Player};
-use crate::minimax::ZobristHash;
+use crate::minimax::{ZobristHash, ZobristIdx};
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 
@@ -14,7 +14,7 @@ use std::hash::Hash;
 /// is not known at compile time.
 ///
 /// Implements the [`Mancala`] trait, and can be converted to and from
-/// [`GameState`] structs. Also implements [`TTHash`] for use with minimax.
+/// [`GameState`] structs.
 ///
 /// If the `serde` feature is enabled, this struct will be serializable and
 /// deserializable.
@@ -95,8 +95,6 @@ impl Mancala for DynGameState {
         &mut self.current_turn
     }
 }
-
-impl ZobristHash for DynGameState {}
 
 impl<const N: usize> From<GameState<N>> for DynGameState {
     fn from(value: GameState<N>) -> Self {

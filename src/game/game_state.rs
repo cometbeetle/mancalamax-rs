@@ -19,7 +19,7 @@ use std::sync::OnceLock;
 /// (i.e., during the execution of the minimax algorithm).
 ///
 /// Implements the [`Mancala`] trait, and can be converted to and from
-/// [`DynGameState`] structs. Also implements [`TTHash`] for use with minimax.
+/// [`DynGameState`] structs.
 ///
 /// If the `serde` feature is enabled, this struct will be serializable and
 /// deserializable, via automatic conversion to and from [`DynGameState`].
@@ -122,7 +122,7 @@ impl<const N: usize> Mancala for GameState<N> {
 }
 
 impl<const N: usize> ZobristHash for GameState<N> {
-    fn get_zobrist_val(&self, idx: ZobristIdx) -> Option<u64> {
+    fn get_zobrist_val(&self, idx: ZobristIdx) -> u64 {
         const SEED: u64 = 0x49CB86856BB06133;
         static ZOBRIST_PITS: OnceLock<Vec<u64>> = OnceLock::new();
         static ZOBRIST_STORES: OnceLock<Vec<u64>> = OnceLock::new();
@@ -159,26 +159,25 @@ impl<const N: usize> ZobristHash for GameState<N> {
         match idx {
             ZobristIdx::Pit(player, pit, stones) => {
                 let player = usize::from(player) - 1;
-                let pit = pit - 1;
                 let index = player * (N * total_stones) + pit * total_stones + stones;
-                Some(zobrist_pits[index])
+                zobrist_pits[index]
             }
             ZobristIdx::Store(player, stones) => {
                 let player = usize::from(player) - 1;
                 let index = player * total_stones + stones;
-                Some(zobrist_stores[index])
+                zobrist_stores[index]
             }
-            ZobristIdx::SwitchTurn => Some(zobrist_switch_turn),
-            ZobristIdx::P2Moved => Some(zobrist_p2_moved),
+            ZobristIdx::SwitchTurn => zobrist_switch_turn,
+            ZobristIdx::P2Moved => zobrist_p2_moved,
         }
     }
 
-    fn get_zobrist_hash(&self) -> Option<u64> {
-        Some(self.zobrist_hash)
+    fn get_zobrist_hash(&self) -> u64 {
+        self.zobrist_hash
     }
 
-    fn set_zobrist_hash(&mut self, hash: u64) -> Result<(), ()> {
-        Ok(self.zobrist_hash = hash)
+    fn set_zobrist_hash(&mut self, hash: u64) {
+        self.zobrist_hash = hash
     }
 }
 

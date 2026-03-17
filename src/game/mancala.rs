@@ -1,6 +1,5 @@
 //! Traits and enums necessary for Mancala gameplay.
 
-use crate::minimax::{ZobristHash, ZobristIdx};
 use rand::seq::IndexedRandom;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -134,7 +133,7 @@ pub enum GameOutcome {
 /// Provides a default implementation of Mancala gameplay for all implementors,
 /// and specifies certain accessor and mutable reference methods that must be
 /// implemented on a per-type basis (i.e., no default implementation can be provided).
-pub trait Mancala: ZobristHash + Clone + Display + Send + Sync + Hash + PartialEq + Eq {
+pub trait Mancala: Clone + Display + Send + Sync + Hash + PartialEq + Eq {
     /// Used to indicate the underlying array-like type used to store
     /// the board contents for each player.
     type Board: AsRef<[usize]> + AsMut<[usize]>;
@@ -236,47 +235,12 @@ pub trait Mancala: ZobristHash + Clone + Display + Send + Sync + Hash + PartialE
     /// Switches the current turn. Used inside [`make_move`][Self::make_move].
     fn switch_turn(&mut self) {
         *self.current_turn_mut() = self.current_turn().other();
-        match self.update_zobrist_hash(ZobristIdx::SwitchTurn) {
-            _ => {}
-        }
     }
 
     /// Rotates the board. Used inside [`make_move`][Self::make_move] when the swap move is requested.
     fn rotate_board(&mut self) {
-        if self.zobrist_enabled() {
-            for player in [Player::One, Player::Two] {
-                for pit in 1..=self.pits() {
-                    let balance = self.pit_balance(player, pit).unwrap();
-                    let pit_idx = ZobristIdx::Pit(player, pit, balance);
-                    match self.update_zobrist_hash(pit_idx) {
-                        _ => {}
-                    }
-                }
-                let store_idx = ZobristIdx::Store(player, self.score(player));
-                match self.update_zobrist_hash(store_idx) {
-                    _ => {}
-                }
-            }
-        }
-
         self.board_mut().swap(0, 1);
         self.stores_mut().swap(0, 1);
-
-        if self.zobrist_enabled() {
-            for player in [Player::One, Player::Two] {
-                for pit in 1..=self.pits() {
-                    let balance = self.pit_balance(player, pit).unwrap();
-                    let pit_idx = ZobristIdx::Pit(player, pit, balance);
-                    match self.update_zobrist_hash(pit_idx) {
-                        _ => {}
-                    }
-                }
-                let store_idx = ZobristIdx::Store(player, self.score(player));
-                match self.update_zobrist_hash(store_idx) {
-                    _ => {}
-                }
-            }
-        }
     }
 
     /// Returns a new board state, updated to reflect the result of making
@@ -300,9 +264,6 @@ pub trait Mancala: ZobristHash + Clone + Display + Send + Sync + Hash + PartialE
                 new_state.switch_turn();
                 *new_state.ply_mut() += 1;
                 new_state.set_p2_moved(true);
-                match new_state.update_zobrist_hash(ZobristIdx::P2Moved) {
-                    _ => {}
-                }
                 return Ok(new_state);
             }
             Move::Pit(pit) => pit - 1,
@@ -311,21 +272,12 @@ pub trait Mancala: ZobristHash + Clone + Display + Send + Sync + Hash + PartialE
         // Ensure swap move is only available on Player 2's first move.
         if new_state.current_turn() == Player::Two {
             new_state.set_p2_moved(true);
-            match new_state.update_zobrist_hash(ZobristIdx::P2Moved) {
-                _ => {}
-            }
         }
 
         // Get current player, find adjusted pit index, and collect number of stones to distribute.
         let mut side = new_state.current_turn();
         let stones = new_state.board()[side].as_ref()[pit];
-        match new_state.update_zobrist_hash(ZobristIdx::Pit(side, pit + 1, stones)) {
-            _ => {}
-        }
         new_state.board_mut()[side].as_mut()[pit] = 0;
-        match new_state.update_zobrist_hash(ZobristIdx::Pit(side, pit + 1, 0)) {
-            _ => {}
-        }
         pit += 1;
 
         // Initialize turn variables.
@@ -338,27 +290,12 @@ pub trait Mancala: ZobristHash + Clone + Display + Send + Sync + Hash + PartialE
 
             if pit != new_state.pits() {
                 // Add stone to pit.
-                let old_stones = new_state.board()[side].as_ref()[pit];
-                match new_state.update_zobrist_hash(ZobristIdx::Pit(side, pit + 1, old_stones)) {
-                    _ => {}
-                }
                 new_state.board_mut()[side].as_mut()[pit] += 1;
-                match new_state.update_zobrist_hash(ZobristIdx::Pit(side, pit + 1, old_stones + 1))
-                {
-                    _ => {}
-                }
             } else {
                 // Only add stones to the current player's store.
                 let add_to_store = side == new_state.current_turn();
                 if add_to_store {
-                    let old_stones = new_state.stores()[side];
-                    match new_state.update_zobrist_hash(ZobristIdx::Store(side, old_stones)) {
-                        _ => {}
-                    }
                     new_state.stores_mut()[side] += 1;
-                    match new_state.update_zobrist_hash(ZobristIdx::Store(side, old_stones + 1)) {
-                        _ => {}
-                    }
                     go_again = last_stone;
                 }
 
@@ -370,33 +307,9 @@ pub trait Mancala: ZobristHash + Clone + Display + Send + Sync + Hash + PartialE
                 // If we DID add to the store, and if that wasn't the last stone, add one to the
                 // next player's pit, and increment i to avoid adding two stones for the same i.
                 if !add_to_store {
-                    let old_stones = new_state.board()[side].as_ref()[pit];
-                    match new_state.update_zobrist_hash(ZobristIdx::Pit(side, pit + 1, old_stones))
-                    {
-                        _ => {}
-                    }
                     new_state.board_mut()[side].as_mut()[pit] += 1;
-                    match new_state.update_zobrist_hash(ZobristIdx::Pit(
-                        side,
-                        pit + 1,
-                        old_stones + 1,
-                    )) {
-                        _ => {}
-                    }
                 } else if !last_stone {
-                    let old_stones = new_state.board()[side].as_ref()[pit];
-                    match new_state.update_zobrist_hash(ZobristIdx::Pit(side, pit + 1, old_stones))
-                    {
-                        _ => {}
-                    }
                     new_state.board_mut()[side].as_mut()[pit] += 1;
-                    match new_state.update_zobrist_hash(ZobristIdx::Pit(
-                        side,
-                        pit + 1,
-                        old_stones + 1,
-                    )) {
-                        _ => {}
-                    }
                     i += 1;
                 }
             }
@@ -411,42 +324,10 @@ pub trait Mancala: ZobristHash + Clone + Display + Send + Sync + Hash + PartialE
                     Player::Two => [new_state.pits() - pit - 1, pit],
                 };
 
-                match new_state
-                    .update_zobrist_hash(ZobristIdx::Store(side, new_state.stores()[side]))
-                {
-                    _ => {}
-                }
                 new_state.stores_mut()[side] += new_state.board()[0].as_ref()[to_capture[0]];
                 new_state.stores_mut()[side] += new_state.board()[1].as_ref()[to_capture[1]];
-                match new_state
-                    .update_zobrist_hash(ZobristIdx::Store(side, new_state.stores()[side]))
-                {
-                    _ => {}
-                }
-                match new_state.update_zobrist_hash(ZobristIdx::Pit(
-                    Player::One,
-                    to_capture[0] + 1,
-                    new_state.board()[0].as_ref()[to_capture[0]],
-                )) {
-                    _ => {}
-                }
-                match new_state.update_zobrist_hash(ZobristIdx::Pit(
-                    Player::Two,
-                    to_capture[1] + 1,
-                    new_state.board()[1].as_ref()[to_capture[1]],
-                )) {
-                    _ => {}
-                }
                 new_state.board_mut()[0].as_mut()[to_capture[0]] = 0;
                 new_state.board_mut()[1].as_mut()[to_capture[1]] = 0;
-                match new_state.update_zobrist_hash(ZobristIdx::Pit(Player::One, to_capture[0] + 1, 0))
-                {
-                    _ => {}
-                }
-                match new_state.update_zobrist_hash(ZobristIdx::Pit(Player::Two, to_capture[1] + 1, 0))
-                {
-                    _ => {}
-                }
             }
 
             pit += 1;
@@ -476,41 +357,9 @@ pub trait Mancala: ZobristHash + Clone + Display + Send + Sync + Hash + PartialE
 
         // If game is finished, player with stones on their side captures them all.
         if let Some(winner) = final_stone_recipient {
-            if self.zobrist_enabled() {
-                for player in [Player::One, Player::Two] {
-                    for pit in 1..=self.pits() {
-                        let balance = self.pit_balance(player, pit).unwrap();
-                        let pit_idx = ZobristIdx::Pit(player, pit, balance);
-                        match new_state.update_zobrist_hash(pit_idx) {
-                            _ => {}
-                        }
-                    }
-                    let store_idx = ZobristIdx::Store(player, self.score(player));
-                    match new_state.update_zobrist_hash(store_idx) {
-                        _ => {}
-                    }
-                }
-            }
-
             for pit in 0..new_state.pits() {
                 new_state.stores_mut()[winner] += new_state.board()[winner].as_ref()[pit];
                 new_state.board_mut()[winner].as_mut()[pit] = 0;
-            }
-
-            if self.zobrist_enabled() {
-                for player in [Player::One, Player::Two] {
-                    for pit in 1..=self.pits() {
-                        let balance = self.pit_balance(player, pit).unwrap();
-                        let pit_idx = ZobristIdx::Pit(player, pit, balance);
-                        match new_state.update_zobrist_hash(pit_idx) {
-                            _ => {}
-                        }
-                    }
-                    let store_idx = ZobristIdx::Store(player, self.score(player));
-                    match new_state.update_zobrist_hash(store_idx) {
-                        _ => {}
-                    }
-                }
             }
         }
 

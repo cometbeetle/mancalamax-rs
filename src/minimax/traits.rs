@@ -1,6 +1,6 @@
 //! Traits used for the minimax algorithm implementation.
 
-use crate::game::{Mancala, Player};
+use crate::game::{Mancala, Player, Move};
 
 /// Enum used to represent an action that should be recorded by the
 /// Zobrist hashing system. Each instance serves as an index into the
@@ -14,50 +14,76 @@ pub enum ZobristIdx {
 }
 
 /// Trait used to implement Zobrist hashing for use with the minimax
-/// transposition table system. The default implementation will not
-/// enable any Zobrist hashing, and can be safely added to new data
-/// structures that implement the [`Mancala`] trait.
-pub trait ZobristHash {
-    /// Returns whether Zobrist hashing is enabled. Simply checks whether
-    /// [`get_zobrist_hash`] returns [`Some`].
-    fn zobrist_enabled(&self) -> bool {
-        self.get_zobrist_hash().is_some()
+/// transposition table system. Designed to be implemented on structs
+/// that also implement [`Mancala`].
+pub trait ZobristHash: Mancala {
+    /// Makes a move using the underlying [`Mancala::make_move`] logic while
+    /// simultaneously updating the Zobrist hash of the implementing object.
+    fn make_move_zobrist(&self, selection: Move) -> Result<Self, ()> {
+        let mut new_state = self.make_move(selection)?;
+        perform_updates(self, &mut new_state);
+        Ok(new_state)
     }
 
-    /// Returns the Zobrist value for a given action index.
-    /// Returns [`None`] if unimplemented.
-    #[allow(unused_variables)]
-    fn get_zobrist_val(&self, idx: ZobristIdx) -> Option<u64> {
-        None
-    }
-
-    /// Returns the current Zobrist hash of the implementing data structure instance,
-    /// if one exists. The default implementation simply returns [`None`]
-    /// and should be overridden in an actual implementation.
-    fn get_zobrist_hash(&self) -> Option<u64> {
-        None
-    }
-
-    /// Sets the Zobrist hash of the implement data structure instance to a
-    /// particular value. Acts as a no-op if unimplemented.
-    #[allow(unused_variables)]
-    fn set_zobrist_hash(&mut self, hash: u64) -> Result<(), ()> {
-        Err(())
+    /// Makes a random move using the underlying [`Mancala::make_move_rand`] logic
+    /// while simultaneously updating the Zobrist hash of the implementing object.
+    fn make_move_rand_zobrist(&self) -> Result<(Self, Move), ()> {
+        let (mut new_state, m) = self.make_move_rand()?;
+        perform_updates(self, &mut new_state);
+        Ok((new_state, m))
     }
 
     /// Performs a Zobrist hash update using XOR. The default implementation
     //  is sufficient, and does not need to be overridden.
-    fn update_zobrist_hash(&mut self, idx: ZobristIdx) -> Result<(), ()> {
-        let existing_hash = match self.get_zobrist_hash() {
-            Some(hash) => hash,
-            None => return Err(()),
-        };
+    fn update_zobrist_hash(&mut self, old: ZobristIdx, new: ZobristIdx) {
+        let existing_hash = self.get_zobrist_hash();
+        let old_zobrist_val = self.get_zobrist_val(old);
+        let new_zobrist_val = self.get_zobrist_val(new);
+        self.set_zobrist_hash(existing_hash ^ old_zobrist_val ^ new_zobrist_val)
+    }
 
-        let zobrist_val = match self.get_zobrist_val(idx) {
-            Some(val) => val,
-            None => return Err(()),
-        };
-
+    fn update_zobrist_hash_partial(&mut self, idx: ZobristIdx) {
+        let existing_hash = self.get_zobrist_hash();
+        let zobrist_val = self.get_zobrist_val(idx);
         self.set_zobrist_hash(existing_hash ^ zobrist_val)
+    }
+
+    /// Returns the Zobrist value for a given action index.
+    fn get_zobrist_val(&self, idx: ZobristIdx) -> u64;
+
+    /// Returns the current Zobrist hash of the implementing data structure instance.
+    fn get_zobrist_hash(&self) -> u64;
+
+    /// Sets the Zobrist hash of the implement data structure instance to a
+    /// particular value.
+    fn set_zobrist_hash(&mut self, hash: u64);
+}
+
+/// Helper function to compare a new state with an old state, and update
+/// its Zobrist hash value accordingly.
+fn perform_updates<T: Mancala + ZobristHash>(old_state: &T, new_state: &mut T) {
+    for player in [Player::One, Player:: Two] {
+        for pit in 0..old_state.pits() {
+            let old = ZobristIdx::Pit(player, pit, old_state.board()[player].as_ref()[pit]);
+            let new = ZobristIdx::Pit(player, pit, new_state.board()[player].as_ref()[pit]);
+            match new_state.update_zobrist_hash(old, new) {
+                _ => {}
+            }
+        }
+        let old = ZobristIdx::Store(player, old_state.score(player));
+        let new = ZobristIdx::Store(player, new_state.score(player));
+        match new_state.update_zobrist_hash(old, new) {
+            _ => {}
+        }
+    }
+    if new_state.current_turn() != old_state.current_turn() {
+        match new_state.update_zobrist_hash_partial(ZobristIdx::SwitchTurn) {
+            _ => {}
+        }
+    }
+    if new_state.p2_moved() != old_state.p2_moved() {
+        match new_state.update_zobrist_hash_partial(ZobristIdx::P2Moved) {
+            _ => {}
+        }
     }
 }

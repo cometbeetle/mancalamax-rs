@@ -94,7 +94,7 @@ pub fn player_v_minimax<T: Mancala + ZobristHash>(
         if s.current_turn() == minimax_player {
             s = minimax_or_random_move(&s, &minimax, "MINIMAX");
         } else {
-            s = s.make_move(user_move_input(&s)).unwrap();
+            s = s.make_move_zobrist(user_move_input(&s)).unwrap();
             println!();
         }
     }
@@ -317,7 +317,7 @@ fn minimax_or_random_move<T: Mancala + ZobristHash>(s: &T, m: &Minimax<T>, name:
     let (s, result) = match m.search_utility(&s) {
         // Use the minimax move.
         Some(r) => {
-            let new_s = s.make_move(r.found_move).unwrap();
+            let new_s = s.make_move_zobrist(r.found_move).unwrap();
             let r = MoveResult {
                 chosen_move: r.found_move,
                 utility: r.utility,
@@ -329,7 +329,7 @@ fn minimax_or_random_move<T: Mancala + ZobristHash>(s: &T, m: &Minimax<T>, name:
         }
         // Use a random move.
         None => {
-            let (new_s, chosen_move) = s.make_move_rand().unwrap();
+            let (new_s, chosen_move) = s.make_move_rand_zobrist().unwrap();
             let r = MoveResult {
                 chosen_move,
                 utility: f32::NAN,

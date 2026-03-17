@@ -1,6 +1,6 @@
 //! Implementation of the minimax algorithm with alpha-beta pruning for Mancala.
 
-use super::{MoveOrderFn, StateEvalFn, ZobristHash};
+use super::{MoveOrderFn, StateEvalFn, ZobristHash, ZobristIdx};
 use crate::game::{Mancala, Move, Player};
 use rustc_hash::FxHashMap;
 use std::cell::{Cell, RefCell};
@@ -232,7 +232,8 @@ impl<T: Mancala + ZobristHash> Minimax<T> {
         let mut move_util_term: Vec<(Move, f32, bool)> = Vec::new();
 
         for m in self.order_moves_with_tt(state) {
-            let new_state = state.make_move(m).unwrap();
+            let new_state = state.make_move_zobrist(m).unwrap();
+
             let (utility, terminal) = {
                 let result = if new_state.current_turn() == state.current_turn() {
                     self.max_value(&new_state, f32::NEG_INFINITY, f32::INFINITY, depth, limit)
@@ -287,7 +288,8 @@ impl<T: Mancala + ZobristHash> Minimax<T> {
         let mut fully_searched = true;
 
         for m in self.order_moves_with_tt(state) {
-            let new_state = state.make_move(m).unwrap();
+            let new_state = state.make_move_zobrist(m).unwrap();
+
             let (v2, local_terminal) = {
                 let result = if new_state.current_turn() == state.current_turn() {
                     self.max_value(&new_state, alpha, beta, depth + 1, limit)
@@ -363,7 +365,8 @@ impl<T: Mancala + ZobristHash> Minimax<T> {
         let mut fully_searched = true;
 
         for m in self.order_moves_with_tt(state) {
-            let new_state = state.make_move(m).unwrap();
+            let new_state = state.make_move_zobrist(m).unwrap();
+
             let (v2, local_terminal) = {
                 let result = if new_state.current_turn() == state.current_turn() {
                     self.min_value(&new_state, alpha, beta, depth + 1, limit)
@@ -483,15 +486,9 @@ impl<T: Mancala + ZobristHash> Minimax<T> {
             return None;
         }
 
-        debug_assert!(
-            state.get_zobrist_hash().is_some(),
-            "Zobrist hashing may not be correctly implemented for `{}`",
-            std::any::type_name::<T>()
-        );
-
         self.t_table
             .borrow()
-            .get(&state.get_zobrist_hash()?)
+            .get(&state.get_zobrist_hash())
             .and_then(|e| e.probe(remaining, alpha, beta))
     }
 
@@ -510,13 +507,7 @@ impl<T: Mancala + ZobristHash> Minimax<T> {
             return;
         }
 
-        debug_assert!(
-            state.get_zobrist_hash().is_some(),
-            "Zobrist hashing may not be correctly implemented for `{}`",
-            std::any::type_name::<T>()
-        );
-
-        let key = state.get_zobrist_hash().unwrap();
+        let key = state.get_zobrist_hash();
         let entry = TTEntry::new(v, remaining, found_move, terminal, alpha_orig, beta_orig);
         let mut table = self.t_table.borrow_mut();
         if table.get(&key).is_none_or(|old| {
@@ -531,7 +522,7 @@ impl<T: Mancala + ZobristHash> Minimax<T> {
     fn get_tt_move(&self, state: &T) -> Option<Move> {
         self.t_table
             .borrow()
-            .get(&state.get_zobrist_hash()?)
+            .get(&state.get_zobrist_hash())
             .and_then(|e| e.found_move)
     }
 
