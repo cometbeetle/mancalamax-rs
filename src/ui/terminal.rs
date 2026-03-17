@@ -309,7 +309,7 @@ fn minimax_or_random_move<T: Mancala + TTHash<T>>(s: &T, m: &Minimax<T>, name: &
         chosen_move: Move,
         utility: f32,
         depth_searched: Option<usize>,
-        exact: bool,
+        fully_searched: bool,
         random: bool,
     }
 
@@ -317,12 +317,12 @@ fn minimax_or_random_move<T: Mancala + TTHash<T>>(s: &T, m: &Minimax<T>, name: &
     let (s, result) = match m.search_utility(&s) {
         // Use the minimax move.
         Some(r) => {
-            let new_s = s.make_move(r.best_move()).unwrap();
+            let new_s = s.make_move(r.found_move()).unwrap();
             let r = MoveResult {
-                chosen_move: r.best_move(),
+                chosen_move: r.found_move(),
                 utility: r.utility(),
                 depth_searched: r.depth_searched(),
-                exact: r.exact(),
+                fully_searched: r.fully_searched(),
                 random: false,
             };
             (new_s, r)
@@ -334,7 +334,7 @@ fn minimax_or_random_move<T: Mancala + TTHash<T>>(s: &T, m: &Minimax<T>, name: &
                 chosen_move,
                 utility: f32::NAN,
                 depth_searched: None,
-                exact: false,
+                fully_searched: false,
                 random: true,
             };
             (new_s, r)
@@ -357,7 +357,7 @@ fn minimax_or_random_move<T: Mancala + TTHash<T>>(s: &T, m: &Minimax<T>, name: &
     );
     let confidence = if result.random {
         "Random"
-    } else if result.exact {
+    } else if result.fully_searched {
         "Exact"
     } else {
         "Estimated"

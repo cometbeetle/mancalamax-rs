@@ -15,20 +15,20 @@ pub trait TTHash<T: Mancala> {
 
 /// Stores the value of a minimax search result.
 ///
-/// If the [`exact`][Self::exact] field is [`true`], then the heuristic
+/// If the [`fully_searched`][Self::fully_searched] field is [`true`], then the heuristic
 /// was never used in finding the current result (i.e., the search evaluated all
 /// possible terminal states).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct SearchResult {
-    best_move: Move,
+    found_move: Move,
     utility: f32,
     depth_searched: Option<usize>,
-    exact: bool,
+    fully_searched: bool,
 }
 
 impl SearchResult {
-    pub fn best_move(&self) -> Move {
-        self.best_move
+    pub fn found_move(&self) -> Move {
+        self.found_move
     }
     pub fn utility(&self) -> f32 {
         self.utility
@@ -36,31 +36,31 @@ impl SearchResult {
     pub fn depth_searched(&self) -> Option<usize> {
         self.depth_searched
     }
-    pub fn exact(&self) -> bool {
-        self.exact
+    pub fn fully_searched(&self) -> bool {
+        self.fully_searched
     }
 }
 
 /// Stores the value of a minimax search result involving multiple moves.
 ///
-/// If the [`exact`][Self::exact] field is [`true`], then the heuristic
+/// If the [`fully_searched`][Self::fully_searched] field is [`true`], then the heuristic
 /// was never used in finding the current result (i.e., the search evaluated all
 /// possible terminal states).
 ///
-/// Each [`Move`] in the [`best_moves`][Self::best_moves] field has a
+/// Each [`Move`] in the [`found_moves`][Self::found_moves] field has a
 /// corresponding utility value in the [`utilities`][Self::utilities] field
 /// at the same index.
 #[derive(Debug, Clone)]
 pub struct MultiSearchResult {
-    best_moves: Vec<Move>,
+    found_moves: Vec<Move>,
     utilities: Vec<f32>,
     depth_searched: Option<usize>,
-    exact: bool,
+    fully_searched: bool,
 }
 
 impl MultiSearchResult {
-    pub fn best_moves(&self) -> &Vec<Move> {
-        &self.best_moves
+    pub fn found_moves(&self) -> &Vec<Move> {
+        &self.found_moves
     }
     pub fn utilities(&self) -> &Vec<f32> {
         &self.utilities
@@ -68,8 +68,8 @@ impl MultiSearchResult {
     pub fn depth_searched(&self) -> Option<usize> {
         self.depth_searched
     }
-    pub fn exact(&self) -> bool {
-        self.exact
+    pub fn fully_searched(&self) -> bool {
+        self.fully_searched
     }
 }
 
@@ -142,7 +142,7 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
     /// If no move was found successfully, returns [`None`].
     pub fn search_utility(&self, state: &T) -> Option<SearchResult> {
         self.start_time.set(Some(Instant::now()));
-        let mut best_move: Option<Move> = None;
+        let mut found_move: Option<Move> = None;
         let mut utility = f32::NEG_INFINITY;
         let mut depth_searched: Option<usize> = self.max_depth;
         let mut fully_searched = false;
@@ -155,40 +155,40 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
                 {
                     break;
                 }
-                (best_move, utility, fully_searched) =
+                (found_move, utility, fully_searched) =
                     match self.max_value(state, f32::NEG_INFINITY, f32::INFINITY, 0, Some(limit)) {
-                        InternalResult::Success {
-                            best_move: m,
+                        InternalResult::Node {
+                            found_move: m,
                             utility: v,
-                            exact: c,
-                        } => {
+                            fully_searched: f,
+                        } if m.is_some() => {
                             depth_searched = Some(limit);
-                            (Some(m), v, c)
+                            (m, v, f)
                         }
                         _ => break,
                     };
             }
         } else {
-            (best_move, utility, fully_searched) =
+            (found_move, utility, fully_searched) =
                 match self.max_value(state, f32::NEG_INFINITY, f32::INFINITY, 0, self.max_depth) {
-                    InternalResult::Success {
-                        best_move: m,
+                    InternalResult::Node {
+                        found_move: m,
                         utility: v,
-                        exact: c,
-                    } => (Some(m), v, c),
-                    _ => (None, utility, fully_searched),
+                        fully_searched: f,
+                    } => (m, v, f),
+                    _ => (found_move, utility, fully_searched),
                 }
         }
 
         self.start_time.set(None);
 
-        match best_move {
+        match found_move {
             None => None,
             Some(m) => Some(SearchResult {
-                best_move: m,
+                found_move: m,
                 utility,
                 depth_searched,
-                exact: fully_searched,
+                fully_searched,
             }),
         }
     }
@@ -207,7 +207,10 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
 
         if self.iterative_deepening {
             for limit in 1usize.. {
-                if self.max_depth.is_some_and(|d| limit > d) || self.time_exceeded() {
+                if result.as_ref().is_some_and(|r| r.fully_searched)
+                    || self.max_depth.is_some_and(|d| limit > d)
+                    || self.time_exceeded()
+                {
                     break;
                 }
                 result = match self.max_value_all(state, 0, Some(limit)) {
@@ -231,7 +234,7 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
     ///
     /// If no move was found successfully, returns [`None`].
     pub fn search(&self, state: &T) -> Option<Move> {
-        self.search_utility(state).map(|r| r.best_move)
+        self.search_utility(state).map(|r| r.found_move)
     }
 
     /// Determines whether the algorithm has been running longer than requested.
@@ -263,38 +266,34 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
         }
 
         let depth = depth + 1;
-        let mut move_util_exact: Vec<(Move, f32, bool)> = Vec::new();
+        let mut move_util_term: Vec<(Move, f32, bool)> = Vec::new();
 
         for m in self.order_moves_with_tt(state) {
             let new_state = state.make_move(m).unwrap();
-            let (utility, exact) = {
+            let (utility, terminal) = {
                 let result = if new_state.current_turn() == state.current_turn() {
                     self.max_value(&new_state, f32::NEG_INFINITY, f32::INFINITY, depth, limit)
                 } else {
                     self.min_value(&new_state, f32::NEG_INFINITY, f32::INFINITY, depth, limit)
                 };
                 match result {
-                    InternalResult::Success {
+                    InternalResult::Node {
                         utility: v,
-                        exact: c,
+                        fully_searched: f,
                         ..
-                    } => (v, c),
-                    InternalResult::Evaluated {
-                        utility: v,
-                        exact: c,
-                    } => (v, c),
+                    } => (v, f),
                     InternalResult::Timeout => return None,
                 }
             };
 
-            move_util_exact.push((m, utility, exact));
+            move_util_term.push((m, utility, terminal));
         }
 
         Some(MultiSearchResult {
-            best_moves: move_util_exact.iter().map(|(m, _, _)| m.clone()).collect(),
-            utilities: move_util_exact.iter().map(|(_, v, _)| *v).collect(),
+            found_moves: move_util_term.iter().map(|(m, _, _)| m.clone()).collect(),
+            utilities: move_util_term.iter().map(|(_, v, _)| *v).collect(),
             depth_searched: limit,
-            exact: move_util_exact.iter().all(|(_, _, c)| *c),
+            fully_searched: move_util_term.iter().all(|(_, _, t)| *t),
         })
     }
 
@@ -313,88 +312,71 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
             "Minimax search must be started with `search_utility()` before calling `max_value`"
         );
 
-        // Check transposition table, and narrow bounds if necessary.
-        let alpha_orig = alpha;
-        let beta_orig = beta;
-        let remaining = limit.map(|l| l.saturating_sub(depth)).unwrap_or(usize::MAX);
-        if self.use_t_table
-            && let Some(r) = self.lookup_restrict(state, remaining, &mut alpha, &mut beta)
-        {
+        // Run the common starting procedure.
+        let (early_result, alpha_orig, beta_orig, remaining) =
+            self.max_min_preamble(state, &mut alpha, &mut beta, depth, limit);
+        if let Some(r) = early_result {
             return r;
         }
 
-        // If we are in a terminal state, evaluate utility.
-        if state.is_over() {
-            return InternalResult::Evaluated {
-                utility: self.evaluate(state),
-                exact: true,
-            };
-        }
-
-        // If we have reached the artificial limit, use the heuristic.
-        if limit.is_some_and(|d| depth >= d) {
-            return InternalResult::Evaluated {
-                utility: self.get_heuristic(state),
-                exact: false,
-            };
-        }
-
-        // If the time has expired, return nothing.
-        if self.time_exceeded() {
-            return InternalResult::Timeout;
-        }
-
-        let depth = depth + 1;
         let mut v = f32::NEG_INFINITY;
-        let mut best_move: Option<Move> = None;
-        let mut exact = true;
+        let mut found_move: Option<Move> = None;
+        let mut fully_searched = true;
 
         for m in self.order_moves_with_tt(state) {
             let new_state = state.make_move(m).unwrap();
-            let (v2, local_exact) = {
+            let (v2, local_terminal) = {
                 let result = if new_state.current_turn() == state.current_turn() {
-                    self.max_value(&new_state, alpha, beta, depth, limit)
+                    self.max_value(&new_state, alpha, beta, depth + 1, limit)
                 } else {
-                    self.min_value(&new_state, alpha, beta, depth, limit)
+                    self.min_value(&new_state, alpha, beta, depth + 1, limit)
                 };
                 match result {
-                    InternalResult::Success {
+                    InternalResult::Node {
                         utility: v,
-                        exact: c,
+                        fully_searched: f,
                         ..
-                    } => (v, c),
-                    InternalResult::Evaluated {
-                        utility: v,
-                        exact: c,
-                        ..
-                    } => (v, c),
+                    } => (v, f),
                     InternalResult::Timeout => return InternalResult::Timeout,
                 }
             };
 
             if v2 > v {
                 v = v2;
-                best_move = Some(m);
+                found_move = Some(m);
                 alpha = alpha.max(v);
             }
 
-            exact &= local_exact;
+            fully_searched &= local_terminal;
 
             // Alpha > beta: prune.
             if v >= beta {
-                return match best_move {
-                    None => InternalResult::Evaluated { utility: v, exact },
-                    Some(m) => InternalResult::Success {
-                        best_move: m,
-                        utility: v,
-                        exact,
-                    },
+                return InternalResult::Node {
+                    found_move,
+                    utility: v,
+                    fully_searched,
                 };
             }
         }
 
-        // Store results into the transition table, and return the internal result.
-        self.store_return(state, alpha_orig, beta_orig, v, remaining, best_move, exact)
+        // Store results into the transition table, if necessary.
+        if self.use_t_table {
+            self.tt_store(
+                state,
+                alpha_orig,
+                beta_orig,
+                v,
+                remaining,
+                found_move,
+                fully_searched,
+            )
+        }
+
+        InternalResult::Node {
+            found_move,
+            utility: v,
+            fully_searched,
+        }
     }
 
     /// Minimize the utility / heuristic for a given state, and return the
@@ -412,157 +394,190 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
             "Minimax search must be started with `search_utility()` before calling `min_value`"
         );
 
-        // Check transposition table, and narrow bounds if necessary.
-        let alpha_orig = alpha;
-        let beta_orig = beta;
-        let remaining = limit.map(|l| l.saturating_sub(depth)).unwrap_or(usize::MAX);
-        if self.use_t_table
-            && let Some(r) = self.lookup_restrict(state, remaining, &mut alpha, &mut beta)
-        {
+        // Run the common starting procedure.
+        let (early_result, alpha_orig, beta_orig, remaining) =
+            self.max_min_preamble(state, &mut alpha, &mut beta, depth, limit);
+        if let Some(r) = early_result {
             return r;
         }
 
-        // If we are in a terminal state, evaluate utility.
-        if state.is_over() {
-            return InternalResult::Evaluated {
-                utility: self.evaluate(state),
-                exact: true,
-            };
-        }
-
-        // If we have reached the artificial limit, use the heuristic.
-        if limit.is_some_and(|d| depth >= d) {
-            return InternalResult::Evaluated {
-                utility: self.get_heuristic(state),
-                exact: false,
-            };
-        }
-
-        // If the time has expired, return nothing.
-        if self.time_exceeded() {
-            return InternalResult::Timeout;
-        }
-
-        let depth = depth + 1;
         let mut v = f32::INFINITY;
-        let mut best_move: Option<Move> = None;
-        let mut exact = true;
+        let mut found_move: Option<Move> = None;
+        let mut fully_searched = true;
 
         for m in self.order_moves_with_tt(state) {
             let new_state = state.make_move(m).unwrap();
-            let (v2, local_exact) = {
+            let (v2, local_terminal) = {
                 let result = if new_state.current_turn() == state.current_turn() {
-                    self.min_value(&new_state, alpha, beta, depth, limit)
+                    self.min_value(&new_state, alpha, beta, depth + 1, limit)
                 } else {
-                    self.max_value(&new_state, alpha, beta, depth, limit)
+                    self.max_value(&new_state, alpha, beta, depth + 1, limit)
                 };
                 match result {
-                    InternalResult::Success {
+                    InternalResult::Node {
                         utility: v,
-                        exact: c,
+                        fully_searched: f,
                         ..
-                    } => (v, c),
-                    InternalResult::Evaluated {
-                        utility: v,
-                        exact: c,
-                    } => (v, c),
+                    } => (v, f),
                     InternalResult::Timeout => return InternalResult::Timeout,
                 }
             };
 
             if v2 < v {
                 v = v2;
-                best_move = Some(m);
+                found_move = Some(m);
                 beta = beta.min(v);
             }
 
-            exact &= local_exact;
+            fully_searched &= local_terminal;
 
             // Alpha > beta: prune.
             if v <= alpha {
-                return match best_move {
-                    None => InternalResult::Evaluated { utility: v, exact },
-                    Some(m) => InternalResult::Success {
-                        best_move: m,
-                        utility: v,
-                        exact,
-                    },
+                return InternalResult::Node {
+                    found_move,
+                    utility: v,
+                    fully_searched,
                 };
             }
         }
 
-        // Store results into the transition table, and return the internal result.
-        self.store_return(state, alpha_orig, beta_orig, v, remaining, best_move, exact)
+        // Store results into the transition table, if necessary.
+        if self.use_t_table {
+            self.tt_store(
+                state,
+                alpha_orig,
+                beta_orig,
+                v,
+                remaining,
+                found_move,
+                fully_searched,
+            )
+        }
+
+        InternalResult::Node {
+            found_move,
+            utility: v,
+            fully_searched,
+        }
     }
 
-    /// Helper function to perform a lookup in the transposition table.
-    fn lookup_restrict(
+    /// Helper function that performs the following actions at the beginning
+    /// of either [`max_value`] or [`min_value`]:
+    /// - Check if a valid result is in the transposition table.
+    /// - Modify the search bounds based on the transposition table, if necessary.
+    /// - Check if the state is a terminal state.
+    /// - Check if the depth limit has been reached.
+    /// - Check if the time limit has been exceeded.
+    fn max_min_preamble(
+        &self,
+        state: &T,
+        alpha: &mut f32,
+        beta: &mut f32,
+        depth: usize,
+        limit: Option<usize>,
+    ) -> (Option<InternalResult>, f32, f32, usize) {
+        // Keep track of the original values for alpha, beta, and the remaining depth.
+        let alpha_orig = *alpha;
+        let beta_orig = *beta;
+        let remaining = limit.map(|l| l.saturating_sub(depth)).unwrap_or(usize::MAX);
+
+        // Check transposition table, and narrow bounds if necessary.
+        if let Some(r) = self.tt_probe(state, remaining, alpha, beta) {
+            return (Some(r), alpha_orig, beta_orig, remaining);
+        }
+
+        // If we are in a terminal state, evaluate utility.
+        if state.is_over() {
+            let r = InternalResult::Node {
+                found_move: None,
+                utility: self.evaluate(state),
+                fully_searched: true,
+            };
+            return (Some(r), alpha_orig, beta_orig, remaining);
+        }
+
+        // If we have reached the artificial depth limit, use the heuristic.
+        if limit.is_some_and(|d| depth >= d) {
+            let r = InternalResult::Node {
+                found_move: None,
+                utility: self.get_heuristic(state),
+                fully_searched: false,
+            };
+            return (Some(r), alpha_orig, beta_orig, remaining);
+        }
+
+        // If the time has expired, return nothing by indicating a timeout.
+        if self.time_exceeded() {
+            return (
+                Some(InternalResult::Timeout),
+                alpha_orig,
+                beta_orig,
+                remaining,
+            );
+        }
+
+        // Continue the search if no termination conditions are met.
+        (None, alpha_orig, beta_orig, remaining)
+    }
+
+    /// Helper function to probe the transposition table for a valid result.
+    fn tt_probe(
         &self,
         state: &T,
         remaining: usize,
         alpha: &mut f32,
         beta: &mut f32,
     ) -> Option<InternalResult> {
-        if let Some(entry) = self.t_table.borrow().get(&state.into()) {
-            if entry.remaining >= remaining {
-                match entry.bound {
-                    Bound::Between => return Some(entry.to_internal()),
-                    Bound::Lower => *alpha = alpha.max(entry.value),
-                    Bound::Upper => *beta = beta.min(entry.value),
-                }
-                if alpha >= beta {
-                    return Some(entry.to_internal());
-                }
-            }
+        if !self.use_t_table {
+            return None;
         }
-        None
+
+        self.t_table
+            .borrow()
+            .get(&state.into())
+            .and_then(|e| e.probe(remaining, alpha, beta))
     }
 
-    /// Helper function to store a state in the transposition table, and return the
-    /// corresponding internal result.
-    fn store_return(
+    /// Helper function to store a state in the transposition table.
+    fn tt_store(
         &self,
         state: &T,
         alpha_orig: f32,
         beta_orig: f32,
         v: f32,
         remaining: usize,
-        best_move: Option<Move>,
-        exact: bool,
-    ) -> InternalResult {
-        let bound = if v <= alpha_orig {
-            Bound::Upper
-        } else if v >= beta_orig {
-            Bound::Lower
-        } else {
-            Bound::Between
-        };
-
-        let entry = TTEntry {
-            value: v,
-            remaining,
-            bound,
-            best_move,
-            exact,
-        };
+        found_move: Option<Move>,
+        terminal: bool,
+    ) {
+        let entry = TTEntry::new(v, remaining, found_move, terminal, alpha_orig, beta_orig);
 
         if self.use_t_table {
-            self.t_table.borrow_mut().insert(state.into(), entry);
-        }
+            let key = state.into();
+            let mut table = self.t_table.borrow_mut();
 
-        entry.to_internal()
+            if table
+                .get(&key)
+                .is_none_or(|old| entry.remaining >= old.remaining)
+            {
+                table.insert(key, entry);
+            }
+        }
     }
 
-    fn tt_best_move(&self, state: &T) -> Option<Move> {
+    /// Helper function to get the move stored for the current state's
+    /// transposition table entry, if one exists.
+    fn get_tt_move(&self, state: &T) -> Option<Move> {
         self.t_table
             .borrow()
             .get(&state.into())
-            .and_then(|e| e.best_move)
+            .and_then(|e| e.found_move)
     }
 
+    /// Helper function to order the moves during minimax search, ensuring
+    /// that the transposition entry is tried first, if it exists.
     fn order_moves_with_tt(&self, state: &T) -> Vec<Move> {
         let mut moves = self.order_moves(state);
-        if let Some(tt_move) = self.tt_best_move(state) {
+        if let Some(tt_move) = self.get_tt_move(state) {
             if let Some(pos) = moves.iter().position(|m| *m == tt_move) {
                 let m = moves.remove(pos);
                 moves.insert(0, m);
@@ -572,49 +587,93 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
     }
 }
 
-/// Helper enum to store the results of minimax searches.
+/// Helper enum to store the internal results of minimax searches.
 enum InternalResult {
-    Success {
-        best_move: Move,
+    Node {
+        found_move: Option<Move>,
         utility: f32,
-        exact: bool,
-    },
-    Evaluated {
-        utility: f32,
-        exact: bool,
+        fully_searched: bool,
     },
     Timeout,
 }
 
+/// Helper enum to store transposition table entry bounds.
 #[derive(Debug, Clone, Copy)]
-enum Bound {
-    Between,
+enum ValueBound {
+    Exact,
     Lower,
     Upper,
 }
 
+/// Helper struct for storing data in the transposition table.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct TTEntry {
-    value: f32,
+    utility: f32,
+    bound: ValueBound,
+    found_move: Option<Move>,
+    fully_searched: bool,
     remaining: usize,
-    bound: Bound,
-    best_move: Option<Move>,
-    exact: bool,
 }
 
 impl TTEntry {
-    /// Helper function to convert TTEntry to an InternalResult.
+    fn new(
+        value: f32,
+        remaining: usize,
+        found_move: Option<Move>,
+        fully_searched: bool,
+        alpha_orig: f32,
+        beta_orig: f32,
+    ) -> Self {
+        let bound = if value <= alpha_orig {
+            ValueBound::Upper
+        } else if value >= beta_orig {
+            ValueBound::Lower
+        } else {
+            ValueBound::Exact
+        };
+
+        Self {
+            utility: value,
+            remaining,
+            bound,
+            found_move,
+            fully_searched,
+        }
+    }
+
+    /// Helper method to convert TTEntry to an InternalResult.
     fn to_internal(&self) -> InternalResult {
-        match self.best_move {
-            Some(m) => InternalResult::Success {
-                best_move: m,
-                utility: self.value,
-                exact: self.exact,
-            },
-            None => InternalResult::Evaluated {
-                utility: self.value,
-                exact: self.exact,
-            },
+        InternalResult::Node {
+            found_move: self.found_move,
+            utility: self.utility,
+            fully_searched: self.fully_searched,
+        }
+    }
+
+    /// Helper method for getting a valid result from the transposition table,
+    /// if one is present for the given search parameters. Also serves to
+    /// narrow the search bounds, if necessary.
+    fn probe(&self, remaining: usize, alpha: &mut f32, beta: &mut f32) -> Option<InternalResult> {
+        if self.remaining < remaining {
+            return None;
+        }
+
+        match self.bound {
+            ValueBound::Exact => {
+                return Some(self.to_internal());
+            }
+            ValueBound::Lower => {
+                *alpha = alpha.max(self.utility);
+            }
+            ValueBound::Upper => {
+                *beta = beta.min(self.utility);
+            }
+        }
+
+        if *alpha >= *beta {
+            Some(self.to_internal())
+        } else {
+            None
         }
     }
 }

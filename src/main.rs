@@ -13,10 +13,10 @@ fn main() {
     //player_v_player_default();
     //player_v_minimax_default(Player::One);
     let minimax = MinimaxBuilder::new()
-        .max_depth(Some(18))
+        .max_depth(None)
         .iterative_deepening(true)
         .use_t_table(true)
-        .max_time(None);
+        .max_time(Some(time::Duration::from_secs(1)));
     minimax_v_minimax(
         &GameState::default(),
         &minimax,
