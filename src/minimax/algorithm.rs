@@ -20,25 +20,10 @@ pub trait TTHash<T: Mancala> {
 /// possible terminal states).
 #[derive(Debug, Clone, Copy)]
 pub struct SearchResult {
-    found_move: Move,
-    utility: f32,
-    depth_searched: Option<usize>,
-    fully_searched: bool,
-}
-
-impl SearchResult {
-    pub fn found_move(&self) -> Move {
-        self.found_move
-    }
-    pub fn utility(&self) -> f32 {
-        self.utility
-    }
-    pub fn depth_searched(&self) -> Option<usize> {
-        self.depth_searched
-    }
-    pub fn fully_searched(&self) -> bool {
-        self.fully_searched
-    }
+    pub found_move: Move,
+    pub utility: f32,
+    pub depth_searched: Option<usize>,
+    pub fully_searched: bool,
 }
 
 /// Stores the value of a minimax search result involving multiple moves.
@@ -52,25 +37,10 @@ impl SearchResult {
 /// at the same index.
 #[derive(Debug, Clone)]
 pub struct MultiSearchResult {
-    found_moves: Vec<Move>,
-    utilities: Vec<f32>,
-    depth_searched: Option<usize>,
-    fully_searched: bool,
-}
-
-impl MultiSearchResult {
-    pub fn found_moves(&self) -> &Vec<Move> {
-        &self.found_moves
-    }
-    pub fn utilities(&self) -> &Vec<f32> {
-        &self.utilities
-    }
-    pub fn depth_searched(&self) -> Option<usize> {
-        self.depth_searched
-    }
-    pub fn fully_searched(&self) -> bool {
-        self.fully_searched
-    }
+    pub found_moves: Vec<Move>,
+    pub utilities: Vec<f32>,
+    pub depth_searched: Option<usize>,
+    pub fully_searched: bool,
 }
 
 /// Stores the necessary information for executing the minimax algorithm on a
@@ -351,6 +321,17 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
 
             // Alpha > beta: prune.
             if v >= beta {
+                if self.use_t_table {
+                    self.tt_store(
+                        state,
+                        alpha_orig,
+                        beta_orig,
+                        v,
+                        remaining,
+                        found_move,
+                        fully_searched,
+                    );
+                }
                 return InternalResult::Node {
                     found_move,
                     utility: v,
@@ -433,6 +414,17 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
 
             // Alpha > beta: prune.
             if v <= alpha {
+                if self.use_t_table {
+                    self.tt_store(
+                        state,
+                        alpha_orig,
+                        beta_orig,
+                        v,
+                        remaining,
+                        found_move,
+                        fully_searched,
+                    );
+                }
                 return InternalResult::Node {
                     found_move,
                     utility: v,
@@ -463,9 +455,9 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
 
     /// Helper function that performs the following actions at the beginning
     /// of either [`max_value`] or [`min_value`]:
+    /// - Check if the state is a terminal state.
     /// - Check if a valid result is in the transposition table.
     /// - Modify the search bounds based on the transposition table, if necessary.
-    /// - Check if the state is a terminal state.
     /// - Check if the depth limit has been reached.
     /// - Check if the time limit has been exceeded.
     fn max_min_preamble(
@@ -481,11 +473,6 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
         let beta_orig = *beta;
         let remaining = limit.map(|l| l.saturating_sub(depth)).unwrap_or(usize::MAX);
 
-        // Check transposition table, and narrow bounds if necessary.
-        if let Some(r) = self.tt_probe(state, remaining, alpha, beta) {
-            return (Some(r), alpha_orig, beta_orig, remaining);
-        }
-
         // If we are in a terminal state, evaluate utility.
         if state.is_over() {
             let r = InternalResult::Node {
@@ -493,6 +480,11 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
                 utility: self.evaluate(state),
                 fully_searched: true,
             };
+            return (Some(r), alpha_orig, beta_orig, remaining);
+        }
+
+        // Check transposition table, and narrow bounds if necessary.
+        if let Some(r) = self.tt_probe(state, remaining, alpha, beta) {
             return (Some(r), alpha_orig, beta_orig, remaining);
         }
 
@@ -538,7 +530,7 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
             .and_then(|e| e.probe(remaining, alpha, beta))
     }
 
-    /// Helper function to store a state in the transposition table.
+    /// Helper function to store an evaluated state in the transposition table.
     fn tt_store(
         &self,
         state: &T,
@@ -550,17 +542,12 @@ impl<T: Mancala + TTHash<T>> Minimax<T> {
         terminal: bool,
     ) {
         let entry = TTEntry::new(v, remaining, found_move, terminal, alpha_orig, beta_orig);
-
-        if self.use_t_table {
-            let key = state.into();
-            let mut table = self.t_table.borrow_mut();
-
-            if table
-                .get(&key)
-                .is_none_or(|old| entry.remaining >= old.remaining)
-            {
-                table.insert(key, entry);
-            }
+        let key = state.into();
+        let mut table = self.t_table.borrow_mut();
+        if table.get(&key).is_none_or(|old| {
+            (entry.remaining >= old.remaining) || (entry.fully_searched && !old.fully_searched)
+        }) {
+            table.insert(key, entry);
         }
     }
 

@@ -317,12 +317,12 @@ fn minimax_or_random_move<T: Mancala + TTHash<T>>(s: &T, m: &Minimax<T>, name: &
     let (s, result) = match m.search_utility(&s) {
         // Use the minimax move.
         Some(r) => {
-            let new_s = s.make_move(r.found_move()).unwrap();
+            let new_s = s.make_move(r.found_move).unwrap();
             let r = MoveResult {
-                chosen_move: r.found_move(),
-                utility: r.utility(),
-                depth_searched: r.depth_searched(),
-                fully_searched: r.fully_searched(),
+                chosen_move: r.found_move,
+                utility: r.utility,
+                depth_searched: r.depth_searched,
+                fully_searched: r.fully_searched,
                 random: false,
             };
             (new_s, r)
