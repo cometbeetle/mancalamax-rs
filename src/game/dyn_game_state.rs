@@ -1,10 +1,14 @@
 //! Definitions and implementations for dynamically sized Mancala game states.
 
-use super::common::fmt_common;
+use super::common::{fmt_common, zobrist_val_impl};
 use super::game_state::GameState;
 use super::mancala::{Mancala, Player};
+use crate::minimax::{ZobristHash, ZobristIdx};
+use rand::{Rng, SeedableRng};
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
+use std::sync::OnceLock;
+use rand::prelude::StdRng;
 
 /// Stores the necessary components of a Mancala game, including the board,
 /// each player's store, the current ply, and the player currently allowed to move.
@@ -92,6 +96,20 @@ impl Mancala for DynGameState {
 
     fn current_turn_mut(&mut self) -> &mut Player {
         &mut self.current_turn
+    }
+}
+
+impl ZobristHash for DynGameState {
+    fn get_zobrist_val(&self, idx: ZobristIdx) -> u64 {
+        zobrist_val_impl!(self, self.pits(), idx);
+    }
+
+    fn get_zobrist_hash(&self) -> u64 {
+        self.zobrist_hash
+    }
+
+    fn set_zobrist_hash(&mut self, hash: u64) {
+        self.zobrist_hash = hash;
     }
 }
 

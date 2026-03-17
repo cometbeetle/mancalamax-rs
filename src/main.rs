@@ -7,7 +7,6 @@ use mancalamax::ui::{
     ExternalInterface, minimax_v_external, minimax_v_minimax, player_v_external, player_v_minimax,
     player_v_minimax_default, player_v_player_default,
 };
-use std::time;
 
 fn main() {
     //player_v_player_default();

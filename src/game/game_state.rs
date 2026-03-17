@@ -1,6 +1,6 @@
 //! Definitions and implementations for statically sized Mancala game states.
 
-use super::common::fmt_common;
+use super::common::{fmt_common, zobrist_val_impl};
 use super::dyn_game_state::DynGameState;
 use super::mancala::{Mancala, Player};
 use crate::minimax::{ZobristHash, ZobristIdx};
@@ -123,53 +123,7 @@ impl<const N: usize> Mancala for GameState<N> {
 
 impl<const N: usize> ZobristHash for GameState<N> {
     fn get_zobrist_val(&self, idx: ZobristIdx) -> u64 {
-        const SEED: u64 = 0x49CB86856BB06133;
-        static ZOBRIST_PITS: OnceLock<Vec<u64>> = OnceLock::new();
-        static ZOBRIST_STORES: OnceLock<Vec<u64>> = OnceLock::new();
-        static ZOBRIST_SWITCH_TURN: OnceLock<u64> = OnceLock::new();
-        static ZOBRIST_P2_MOVED: OnceLock<u64> = OnceLock::new();
-        static TOTAL_STONES: OnceLock<usize> = OnceLock::new();
-
-        let total_stones = TOTAL_STONES.get_or_init(|| {
-            self.board.iter().flatten().sum::<usize>() + self.stores.iter().sum::<usize>()
-        });
-
-        let zobrist_pits = ZOBRIST_PITS.get_or_init(|| {
-            let mut rng = StdRng::seed_from_u64(SEED);
-            let total_entries = 2 * N * total_stones;
-            (0..total_entries).map(|_| rng.next_u64()).collect()
-        });
-
-        let zobrist_stores = ZOBRIST_STORES.get_or_init(|| {
-            let mut rng = StdRng::seed_from_u64(SEED ^ 1);
-            let total_entries = 2 * total_stones;
-            (0..total_entries).map(|_| rng.next_u64()).collect()
-        });
-
-        let zobrist_switch_turn = *ZOBRIST_SWITCH_TURN.get_or_init(|| {
-            let mut rng = StdRng::seed_from_u64(SEED ^ 2);
-            rng.next_u64()
-        });
-
-        let zobrist_p2_moved = *ZOBRIST_P2_MOVED.get_or_init(|| {
-            let mut rng = StdRng::seed_from_u64(SEED ^ 3);
-            rng.next_u64()
-        });
-
-        match idx {
-            ZobristIdx::Pit(player, pit, stones) => {
-                let player = usize::from(player) - 1;
-                let index = player * (N * total_stones) + pit * total_stones + stones;
-                zobrist_pits[index]
-            }
-            ZobristIdx::Store(player, stones) => {
-                let player = usize::from(player) - 1;
-                let index = player * total_stones + stones;
-                zobrist_stores[index]
-            }
-            ZobristIdx::SwitchTurn => zobrist_switch_turn,
-            ZobristIdx::P2Moved => zobrist_p2_moved,
-        }
+        zobrist_val_impl!(self, N, idx);
     }
 
     fn get_zobrist_hash(&self) -> u64 {

@@ -33,8 +33,7 @@ pub trait ZobristHash: Mancala {
         Ok((new_state, m))
     }
 
-    /// Performs a Zobrist hash update using XOR. The default implementation
-    //  is sufficient, and does not need to be overridden.
+    /// Performs a Zobrist hash update based on an old index and a new index.
     fn update_zobrist_hash(&mut self, old: ZobristIdx, new: ZobristIdx) {
         let existing_hash = self.get_zobrist_hash();
         let old_zobrist_val = self.get_zobrist_val(old);
@@ -42,6 +41,7 @@ pub trait ZobristHash: Mancala {
         self.set_zobrist_hash(existing_hash ^ old_zobrist_val ^ new_zobrist_val)
     }
 
+    /// Performs a Zobrist hash update only based on a single index.
     fn update_zobrist_hash_partial(&mut self, idx: ZobristIdx) {
         let existing_hash = self.get_zobrist_hash();
         let zobrist_val = self.get_zobrist_val(idx);
