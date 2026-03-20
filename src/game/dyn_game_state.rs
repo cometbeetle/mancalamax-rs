@@ -4,11 +4,11 @@ use super::common::{fmt_common, zobrist_val_impl};
 use super::game_state::GameState;
 use super::mancala::{Mancala, Player};
 use crate::minimax::{ZobristHash, ZobristIdx};
+use rand::prelude::StdRng;
 use rand::{Rng, SeedableRng};
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use std::sync::OnceLock;
-use rand::prelude::StdRng;
 
 /// Stores the necessary components of a Mancala game, including the board,
 /// each player's store, the current ply, and the player currently allowed to move.

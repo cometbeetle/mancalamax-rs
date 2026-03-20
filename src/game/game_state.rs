@@ -80,6 +80,10 @@ impl Default for GameState<6> {
 impl<const N: usize> Mancala for GameState<N> {
     type Board = [usize; N];
 
+    fn pits(&self) -> usize {
+        N
+    }
+
     fn board(&self) -> &[Self::Board; 2] {
         &self.board
     }

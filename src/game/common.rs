@@ -103,7 +103,7 @@ macro_rules! zobrist_val_impl {
             ZobristIdx::SwitchTurn => zobrist_switch_turn,
             ZobristIdx::P2Moved => zobrist_p2_moved,
         }
-    }
+    };
 }
 
 pub(super) use zobrist_val_impl;
