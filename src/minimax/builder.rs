@@ -1,13 +1,13 @@
 //! Builder utilities for constructing [`Minimax`] instances.
 
 use super::Minimax;
-use super::{MoveOrderFn, StateEvalFn, ZobristHash};
-use crate::game::{Mancala, Move, Player};
+use super::{MancalaZobrist, MoveOrderFn, StateEvalFn};
+use crate::game::{Move, Player};
 use std::time::Duration;
 
 /// Helper for constructing [`Minimax`] instances based on certain specifications.
 #[derive(Debug, Clone, Copy)]
-pub struct MinimaxBuilder<T: Mancala> {
+pub struct MinimaxBuilder<T: MancalaZobrist> {
     optimize_for: Player,
     max_depth: Option<usize>,
     max_time: Option<Duration>,
@@ -18,7 +18,7 @@ pub struct MinimaxBuilder<T: Mancala> {
     heuristic: StateEvalFn<T>,
 }
 
-impl<T: Mancala + ZobristHash> MinimaxBuilder<T> {
+impl<T: MancalaZobrist> MinimaxBuilder<T> {
     /// Construct a new [`MinimaxBuilder`] instance using the default configuration.
     ///
     /// See [`MinimaxBuilder::default`] for details.
@@ -125,7 +125,7 @@ impl<T: Mancala + ZobristHash> MinimaxBuilder<T> {
     }
 }
 
-impl<T: Mancala> Default for MinimaxBuilder<T> {
+impl<T: MancalaZobrist> Default for MinimaxBuilder<T> {
     /// The default [`Minimax`] configuration is the following:
     /// - `optimize_for`: [`Player::One`]
     /// - `max_depth`: `12`

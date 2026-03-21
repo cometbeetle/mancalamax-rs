@@ -14,9 +14,9 @@ pub enum ZobristIdx {
 }
 
 /// Trait used to implement Zobrist hashing for use with the minimax
-/// transposition table system. Designed to be implemented on structs
+/// transposition table system. Must be implemented on structs
 /// that also implement [`Mancala`].
-pub trait ZobristHash: Mancala {
+pub trait MancalaZobrist: Mancala {
     /// Makes a move using the underlying [`Mancala::make_move`] logic while
     /// simultaneously updating the Zobrist hash of the implementing object.
     fn make_move_zobrist(&self, selection: Move) -> Result<Self, ()> {
@@ -35,24 +35,24 @@ pub trait ZobristHash: Mancala {
 
     /// Performs a Zobrist hash update based on an old index and a new index.
     fn update_zobrist_hash(&mut self, old: ZobristIdx, new: ZobristIdx) {
-        let existing_hash = self.get_zobrist_hash();
-        let old_zobrist_val = self.get_zobrist_val(old);
-        let new_zobrist_val = self.get_zobrist_val(new);
+        let existing_hash = self.zobrist_hash();
+        let old_zobrist_val = self.zobrist_val(old);
+        let new_zobrist_val = self.zobrist_val(new);
         self.set_zobrist_hash(existing_hash ^ old_zobrist_val ^ new_zobrist_val)
     }
 
     /// Performs a Zobrist hash update only based on a single index.
     fn update_zobrist_hash_partial(&mut self, idx: ZobristIdx) {
-        let existing_hash = self.get_zobrist_hash();
-        let zobrist_val = self.get_zobrist_val(idx);
+        let existing_hash = self.zobrist_hash();
+        let zobrist_val = self.zobrist_val(idx);
         self.set_zobrist_hash(existing_hash ^ zobrist_val)
     }
 
     /// Returns the Zobrist value for a given action index.
-    fn get_zobrist_val(&self, idx: ZobristIdx) -> u64;
+    fn zobrist_val(&self, idx: ZobristIdx) -> u64;
 
     /// Returns the current Zobrist hash of the implementing data structure instance.
-    fn get_zobrist_hash(&self) -> u64;
+    fn zobrist_hash(&self) -> u64;
 
     /// Sets the Zobrist hash of the implement data structure instance to a
     /// particular value.
@@ -61,7 +61,7 @@ pub trait ZobristHash: Mancala {
 
 /// Helper function to compare a new state with an old state, and update
 /// its Zobrist hash value accordingly.
-fn perform_updates<T: Mancala + ZobristHash>(old_state: &T, new_state: &mut T) {
+fn perform_updates<T: MancalaZobrist>(old_state: &T, new_state: &mut T) {
     for player in [Player::One, Player::Two] {
         for pit in 0..old_state.pits() {
             let old_count = old_state.board()[player].as_ref()[pit];

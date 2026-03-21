@@ -7,7 +7,7 @@ pub mod traits;
 
 pub use algorithm::{Minimax, MultiSearchResult, SearchResult};
 pub use builder::MinimaxBuilder;
-pub use traits::{ZobristHash, ZobristIdx};
+pub use traits::{MancalaZobrist, ZobristIdx};
 
 use crate::game::{Move, Player};
 

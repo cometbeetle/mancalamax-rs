@@ -1,7 +1,7 @@
 //! Implementation of the minimax algorithm with alpha-beta pruning for Mancala.
 
-use super::{MoveOrderFn, StateEvalFn, ZobristHash};
-use crate::game::{Mancala, Move, Player};
+use super::{MancalaZobrist, MoveOrderFn, StateEvalFn};
+use crate::game::{Move, Player};
 use rustc_hash::FxHashMap;
 use std::cell::{Cell, RefCell};
 use std::time::{Duration, Instant};
@@ -40,7 +40,7 @@ pub struct MultiSearchResult {
 /// Mancala board state in order to determine the most optimal move (i.e.,
 /// the one that maximizes utility, or is calculated as best based on some heuristic).
 #[derive(Debug, Clone)]
-pub struct Minimax<T: Mancala + ZobristHash> {
+pub struct Minimax<T: MancalaZobrist> {
     pub(super) optimize_for: Player,
     pub(super) max_depth: Option<usize>,
     pub(super) max_time: Option<Duration>,
@@ -53,7 +53,7 @@ pub struct Minimax<T: Mancala + ZobristHash> {
     pub(super) t_table: RefCell<FxHashMap<u64, TTEntry>>,
 }
 
-impl<T: Mancala + ZobristHash> Minimax<T> {
+impl<T: MancalaZobrist> Minimax<T> {
     /// Returns the player for which minimax will optimize the outcome.
     pub fn optimize_for(&self) -> Player {
         self.optimize_for
@@ -323,12 +323,12 @@ impl<T: Mancala + ZobristHash> Minimax<T> {
         // Store results into the transition table, if necessary.
         self.tt_store(
             state,
-            alpha_orig,
-            beta_orig,
             v,
             remaining,
             found_move,
             fully_searched,
+            alpha_orig,
+            beta_orig,
         );
 
         InternalResult::Node {
@@ -400,12 +400,12 @@ impl<T: Mancala + ZobristHash> Minimax<T> {
         // Store results into the transition table, if necessary.
         self.tt_store(
             state,
-            alpha_orig,
-            beta_orig,
             v,
             remaining,
             found_move,
             fully_searched,
+            alpha_orig,
+            beta_orig,
         );
 
         InternalResult::Node {
@@ -488,7 +488,7 @@ impl<T: Mancala + ZobristHash> Minimax<T> {
 
         self.t_table
             .borrow()
-            .get(&state.get_zobrist_hash())
+            .get(&state.zobrist_hash())
             .and_then(|e| e.probe(remaining, alpha, beta))
     }
 
@@ -496,19 +496,26 @@ impl<T: Mancala + ZobristHash> Minimax<T> {
     fn tt_store(
         &self,
         state: &T,
-        alpha_orig: f32,
-        beta_orig: f32,
-        v: f32,
+        value: f32,
         remaining: usize,
         found_move: Option<Move>,
-        terminal: bool,
+        fully_searched: bool,
+        alpha_orig: f32,
+        beta_orig: f32,
     ) {
         if !self.use_t_table {
             return;
         }
 
-        let key = state.get_zobrist_hash();
-        let entry = TTEntry::new(v, remaining, found_move, terminal, alpha_orig, beta_orig);
+        let key = state.zobrist_hash();
+        let entry = TTEntry::new(
+            value,
+            remaining,
+            found_move,
+            fully_searched,
+            alpha_orig,
+            beta_orig,
+        );
         let mut table = self.t_table.borrow_mut();
         if table.get(&key).is_none_or(|old| {
             (entry.remaining >= old.remaining) || (entry.fully_searched && !old.fully_searched)
@@ -522,7 +529,7 @@ impl<T: Mancala + ZobristHash> Minimax<T> {
     fn get_tt_move(&self, state: &T) -> Option<Move> {
         self.t_table
             .borrow()
-            .get(&state.get_zobrist_hash())
+            .get(&state.zobrist_hash())
             .and_then(|e| e.found_move)
     }
 

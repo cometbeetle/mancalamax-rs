@@ -1,7 +1,7 @@
 //! Components for the terminal user interface.
 
 use crate::game::{GameOutcome, GameState, Mancala, Move, Player};
-use crate::minimax::{Minimax, MinimaxBuilder, ZobristHash};
+use crate::minimax::{MancalaZobrist, Minimax, MinimaxBuilder};
 use regex::Regex;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
@@ -81,7 +81,7 @@ impl ExternalInterface {
 
 /// Start a terminal-based game of Mancala between a player and a specified
 /// minimax algorithm based on an initial state.
-pub fn player_v_minimax<T: Mancala + ZobristHash>(
+pub fn player_v_minimax<T: MancalaZobrist>(
     initial_state: &T,
     minimax_builder: &MinimaxBuilder<T>,
     minimax_player: Player,
@@ -149,7 +149,7 @@ pub fn player_v_player_default() -> GameState<6> {
 
 /// Start a terminal-based game of Mancala between two minimax opponents
 /// based on an initial state.
-pub fn minimax_v_minimax<T: Mancala + ZobristHash>(
+pub fn minimax_v_minimax<T: MancalaZobrist>(
     initial_state: &T,
     minimax1: &MinimaxBuilder<T>,
     minimax2: &MinimaxBuilder<T>,
@@ -241,7 +241,7 @@ pub fn player_v_external_default<P: AsRef<Path>>(
 /// Start a terminal-based game of Mancala between minimax and an external
 /// agent, using the selected communication interface and directory. A supplied
 /// starting state and minimax configuration are used.
-pub fn minimax_v_external<T: Mancala + ZobristHash, P: AsRef<Path>>(
+pub fn minimax_v_external<T: MancalaZobrist, P: AsRef<Path>>(
     initial_state: &T,
     minimax_builder: &MinimaxBuilder<T>,
     external_player: Player,
@@ -304,7 +304,7 @@ pub fn minimax_v_external_default<P: AsRef<Path>>(
 
 /// Helper function for making moves selected by minimax, or, if no moves
 /// are found, making a random move.
-fn minimax_or_random_move<T: Mancala + ZobristHash>(s: &T, m: &Minimax<T>, name: &str) -> T {
+fn minimax_or_random_move<T: MancalaZobrist>(s: &T, m: &Minimax<T>, name: &str) -> T {
     struct MoveResult {
         chosen_move: Move,
         utility: f32,

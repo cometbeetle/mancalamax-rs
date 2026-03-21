@@ -3,7 +3,7 @@
 use super::common::{fmt_common, zobrist_val_impl};
 use super::game_state::GameState;
 use super::mancala::{Mancala, Player};
-use crate::minimax::{ZobristHash, ZobristIdx};
+use crate::minimax::{MancalaZobrist, ZobristIdx};
 use rand::prelude::StdRng;
 use rand::{Rng, SeedableRng};
 use std::fmt::{Display, Formatter};
@@ -99,12 +99,12 @@ impl Mancala for DynGameState {
     }
 }
 
-impl ZobristHash for DynGameState {
-    fn get_zobrist_val(&self, idx: ZobristIdx) -> u64 {
+impl MancalaZobrist for DynGameState {
+    fn zobrist_val(&self, idx: ZobristIdx) -> u64 {
         zobrist_val_impl!(self, self.pits(), idx);
     }
 
-    fn get_zobrist_hash(&self) -> u64 {
+    fn zobrist_hash(&self) -> u64 {
         self.zobrist_hash
     }
 
@@ -202,10 +202,5 @@ impl DynGameState {
             p2_moved,
             zobrist_hash: 0,
         }
-    }
-
-    /// Returns the current Zobrist hash value stored in the state.
-    pub fn zobrist_hash(&self) -> u64 {
-        self.zobrist_hash
     }
 }
