@@ -374,11 +374,13 @@ pub trait Mancala: Clone + Display + Send + Sync + Hash + PartialEq + Eq {
     }
 
     /// Helper method to select a pit move without the encapsulating enum.
+    #[inline]
     fn make_move_pit(&self, pit: usize) -> Result<Self, ()> {
         self.make_move(Move::Pit(pit))
     }
 
     /// Helper method to select the swap move without the encapsulating enum.
+    #[inline]
     fn make_move_swap(&self) -> Result<Self, ()> {
         self.make_move(Move::Swap)
     }
@@ -395,8 +397,21 @@ pub trait Mancala: Clone + Display + Send + Sync + Hash + PartialEq + Eq {
     }
 
     /// Returns the number of pits per player for the current game.
+    #[inline]
     fn pits(&self) -> usize {
         self.board()[0].as_ref().len()
+    }
+
+    /// Returns the total number of stones present in the current game.
+    fn total_stones(&self) -> usize {
+        let mut sum: usize = 0;
+        for b in self.board() {
+            for s in b.as_ref() {
+                sum += s;
+            }
+        }
+        sum += self.stores().iter().sum::<usize>();
+        sum
     }
 
     /// Provides immutable access to the board.

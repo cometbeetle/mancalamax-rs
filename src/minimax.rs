@@ -3,11 +3,11 @@
 
 pub mod algorithm;
 pub mod builder;
-pub mod traits;
+pub mod zobrist;
 
 pub use algorithm::{Minimax, MultiSearchResult, SearchResult};
 pub use builder::MinimaxBuilder;
-pub use traits::{MancalaZobrist, ZobristIdx};
+pub use zobrist::{MancalaZobrist, ZobristAction, ZobristData};
 
 use crate::game::{Move, Player};
 

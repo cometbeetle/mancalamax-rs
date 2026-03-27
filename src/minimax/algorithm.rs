@@ -1,6 +1,6 @@
 //! Implementation of the minimax algorithm with alpha-beta pruning for Mancala.
 
-use super::{MancalaZobrist, MoveOrderFn, StateEvalFn};
+use super::{MancalaZobrist, MinimaxBuilder, MoveOrderFn, StateEvalFn, ZobristData};
 use crate::game::{Move, Player};
 use rustc_hash::FxHashMap;
 use std::cell::{Cell, RefCell};
@@ -51,50 +51,80 @@ pub struct Minimax<T: MancalaZobrist> {
     pub(super) heuristic: StateEvalFn<T>,
     pub(super) start_time: Cell<Option<Instant>>,
     pub(super) t_table: RefCell<FxHashMap<u64, TTEntry>>,
+    pub(super) z_data: RefCell<ZobristData>,
+}
+
+impl<T: MancalaZobrist> From<MinimaxBuilder<T>> for Minimax<T> {
+    /// Alias for [`MinimaxBuilder::build`].
+    fn from(value: MinimaxBuilder<T>) -> Self {
+        value.build()
+    }
+}
+
+impl<T: MancalaZobrist> From<&MinimaxBuilder<T>> for Minimax<T> {
+    /// Alias for [`MinimaxBuilder::build`].
+    fn from(value: &MinimaxBuilder<T>) -> Self {
+        value.build()
+    }
 }
 
 impl<T: MancalaZobrist> Minimax<T> {
     /// Returns the player for which minimax will optimize the outcome.
+    #[inline]
     pub fn optimize_for(&self) -> Player {
         self.optimize_for
     }
 
     /// Returns the set maximum search depth.
+    #[inline]
     pub fn max_depth(&self) -> Option<usize> {
         self.max_depth
     }
 
     /// Returns the set maximum search time.
+    #[inline]
     pub fn max_time(&self) -> Option<Duration> {
         self.max_time
     }
 
     /// Returns whether iterative deepening will be used during search.
+    #[inline]
     pub fn iterative_deepening(&self) -> bool {
         self.iterative_deepening
     }
 
     /// Returns whether a transposition table will be used during search.
+    #[inline]
     pub fn use_t_table(&self) -> bool {
         self.use_t_table
     }
 
     /// Returns the start time (if currently running) of the algorithm.
+    #[inline]
     pub fn start_time(&self) -> Option<Instant> {
         self.start_time.get()
     }
 
+    /// Returns a reference to the current Zobrist data.
+    #[inline]
+    pub fn z_data(&self) -> &RefCell<ZobristData> {
+        &self.z_data
+    }
+
     /// Calls the move ordering function on a given state.
+    #[inline]
     pub fn order_moves(&self, state: &T) -> Vec<Move> {
         (self.move_orderer)(state)
     }
 
     /// Calls the evaluation function on a given state.
+    #[inline]
     pub fn evaluate(&self, state: &T) -> f32 {
         (self.evaluator)(state, self.optimize_for)
     }
 
     /// Calls the heuristic function on a given state.
+    #[inline]
     pub fn get_heuristic(&self, state: &T) -> f32 {
         (self.heuristic)(state, self.optimize_for)
     }
@@ -109,6 +139,12 @@ impl<T: MancalaZobrist> Minimax<T> {
         let mut utility = f32::NEG_INFINITY;
         let mut depth_searched: Option<usize> = self.max_depth;
         let mut fully_searched = false;
+
+        // Ensure the current Zobrist values are valid.
+        if !self.z_data.borrow().is_valid_for(state) {
+            self.z_data
+                .replace(ZobristData::for_state_like(state, 0x49CB86856BB06133));
+        }
 
         if self.iterative_deepening {
             for limit in 1usize.. {
@@ -167,6 +203,12 @@ impl<T: MancalaZobrist> Minimax<T> {
     pub fn search_utility_all(&self, state: &T) -> Option<MultiSearchResult> {
         self.start_time.set(Some(Instant::now()));
         let mut result: Option<MultiSearchResult> = None;
+
+        // Ensure the current Zobrist values are valid.
+        if !self.z_data.borrow().is_valid_for(state) {
+            self.z_data
+                .replace(ZobristData::for_state_like(state, 0x49CB86856BB06133));
+        }
 
         if self.iterative_deepening {
             for limit in 1usize.. {
@@ -232,7 +274,7 @@ impl<T: MancalaZobrist> Minimax<T> {
         let mut move_util_term: Vec<(Move, f32, bool)> = Vec::new();
 
         for m in self.order_moves_with_tt(state) {
-            let new_state = state.make_move_zobrist(m).unwrap();
+            let new_state = state.make_move_zobrist(&self.z_data.borrow(), m).unwrap();
 
             let (utility, terminal) = {
                 let result = if new_state.current_turn() == state.current_turn() {
@@ -288,7 +330,7 @@ impl<T: MancalaZobrist> Minimax<T> {
         let mut fully_searched = true;
 
         for m in self.order_moves_with_tt(state) {
-            let new_state = state.make_move_zobrist(m).unwrap();
+            let new_state = state.make_move_zobrist(&self.z_data.borrow(), m).unwrap();
 
             let (v2, local_terminal) = {
                 let result = if new_state.current_turn() == state.current_turn() {
@@ -365,7 +407,7 @@ impl<T: MancalaZobrist> Minimax<T> {
         let mut fully_searched = true;
 
         for m in self.order_moves_with_tt(state) {
-            let new_state = state.make_move_zobrist(m).unwrap();
+            let new_state = state.make_move_zobrist(&self.z_data.borrow(), m).unwrap();
 
             let (v2, local_terminal) = {
                 let result = if new_state.current_turn() == state.current_turn() {

@@ -1,14 +1,11 @@
 //! Definitions and implementations for dynamically sized Mancala game states.
 
-use super::common::{fmt_common, zobrist_val_impl};
+use super::common::fmt_common;
 use super::game_state::GameState;
 use super::mancala::{Mancala, Player};
-use crate::minimax::{MancalaZobrist, ZobristIdx};
-use rand::prelude::StdRng;
-use rand::{Rng, SeedableRng};
+use crate::minimax::MancalaZobrist;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
-use std::sync::OnceLock;
 
 /// Stores the necessary components of a Mancala game, including the board,
 /// each player's store, the current ply, and the player currently allowed to move.
@@ -16,8 +13,8 @@ use std::sync::OnceLock;
 /// Uses a dynamically sized board for use in scenarios where the desired board size
 /// is not known at compile time.
 ///
-/// Implements the [`Mancala`] trait, and can be converted to and from
-/// [`GameState`] structs.
+/// Implements the [`Mancala`] and [`MancalaZobrist`] traits, and can be converted to
+/// and from [`GameState`] structs.
 ///
 /// If the `serde` feature is enabled, this struct will be serializable and
 /// deserializable.
@@ -58,56 +55,64 @@ impl Default for DynGameState {
 impl Mancala for DynGameState {
     type Board = Vec<usize>;
 
+    #[inline]
     fn board(&self) -> &[Self::Board; 2] {
         &self.board
     }
 
+    #[inline]
     fn stores(&self) -> &[usize; 2] {
         &self.stores
     }
 
+    #[inline]
     fn ply(&self) -> usize {
         self.ply
     }
 
+    #[inline]
     fn current_turn(&self) -> Player {
         self.current_turn
     }
 
+    #[inline]
     fn p2_moved(&self) -> bool {
         self.p2_moved
     }
 
+    #[inline]
     fn set_p2_moved(&mut self, value: bool) {
         self.p2_moved = value;
     }
 
+    #[inline]
     fn board_mut(&mut self) -> &mut [Self::Board; 2] {
         &mut self.board
     }
 
+    #[inline]
     fn stores_mut(&mut self) -> &mut [usize; 2] {
         &mut self.stores
     }
 
+    #[inline]
     fn ply_mut(&mut self) -> &mut usize {
         &mut self.ply
     }
 
+    #[inline]
     fn current_turn_mut(&mut self) -> &mut Player {
         &mut self.current_turn
     }
 }
 
 impl MancalaZobrist for DynGameState {
-    fn zobrist_val(&self, idx: ZobristIdx) -> u64 {
-        zobrist_val_impl!(self, self.pits(), idx);
-    }
-
+    #[inline]
     fn zobrist_hash(&self) -> u64 {
         self.zobrist_hash
     }
 
+    #[inline]
     fn set_zobrist_hash(&mut self, hash: u64) {
         self.zobrist_hash = hash;
     }

@@ -1,14 +1,11 @@
 //! Definitions and implementations for statically sized Mancala game states.
 
-use super::common::{fmt_common, zobrist_val_impl};
+use super::common::fmt_common;
 use super::dyn_game_state::DynGameState;
 use super::mancala::{Mancala, Player};
-use crate::minimax::{MancalaZobrist, ZobristIdx};
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use crate::minimax::MancalaZobrist;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
-use std::sync::OnceLock;
 
 /// Stores the necessary components of a Mancala game, including the board,
 /// each player's store, the current ply, and the player currently allowed to move.
@@ -18,8 +15,8 @@ use std::sync::OnceLock;
 /// especially in scenarios where repeated state creation / modification is necessary
 /// (i.e., during the execution of the minimax algorithm).
 ///
-/// Implements the [`Mancala`] trait, and can be converted to and from
-/// [`DynGameState`] structs.
+/// Implements the [`Mancala`] and [`MancalaZobrist`] traits, and can be converted to
+/// and from [`DynGameState`] structs.
 ///
 /// If the `serde` feature is enabled, this struct will be serializable and
 /// deserializable, via automatic conversion to and from [`DynGameState`].
@@ -80,60 +77,69 @@ impl Default for GameState<6> {
 impl<const N: usize> Mancala for GameState<N> {
     type Board = [usize; N];
 
+    #[inline]
     fn pits(&self) -> usize {
         N
     }
 
+    #[inline]
     fn board(&self) -> &[Self::Board; 2] {
         &self.board
     }
 
+    #[inline]
     fn stores(&self) -> &[usize; 2] {
         &self.stores
     }
 
+    #[inline]
     fn ply(&self) -> usize {
         self.ply
     }
 
+    #[inline]
     fn current_turn(&self) -> Player {
         self.current_turn
     }
 
+    #[inline]
     fn p2_moved(&self) -> bool {
         self.p2_moved
     }
 
+    #[inline]
     fn set_p2_moved(&mut self, value: bool) {
         self.p2_moved = value;
     }
 
+    #[inline]
     fn board_mut(&mut self) -> &mut [Self::Board; 2] {
         &mut self.board
     }
 
+    #[inline]
     fn stores_mut(&mut self) -> &mut [usize; 2] {
         &mut self.stores
     }
 
+    #[inline]
     fn ply_mut(&mut self) -> &mut usize {
         &mut self.ply
     }
 
+    #[inline]
     fn current_turn_mut(&mut self) -> &mut Player {
         &mut self.current_turn
     }
 }
 
 impl<const N: usize> MancalaZobrist for GameState<N> {
-    fn zobrist_val(&self, idx: ZobristIdx) -> u64 {
-        zobrist_val_impl!(self, N, idx);
-    }
-
+    #[inline]
     fn zobrist_hash(&self) -> u64 {
         self.zobrist_hash
     }
 
+    #[inline]
     fn set_zobrist_hash(&mut self, hash: u64) {
         self.zobrist_hash = hash
     }

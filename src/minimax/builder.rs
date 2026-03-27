@@ -3,6 +3,7 @@
 use super::Minimax;
 use super::{MancalaZobrist, MoveOrderFn, StateEvalFn};
 use crate::game::{Move, Player};
+use rustc_hash::FxHashMap;
 use std::time::Duration;
 
 /// Helper for constructing [`Minimax`] instances based on certain specifications.
@@ -16,12 +17,71 @@ pub struct MinimaxBuilder<T: MancalaZobrist> {
     move_orderer: MoveOrderFn<T>,
     evaluator: StateEvalFn<T>,
     heuristic: StateEvalFn<T>,
+    t_table_capacity: usize,
+}
+
+impl<T: MancalaZobrist> Default for MinimaxBuilder<T> {
+    /// The default [`Minimax`] configuration is the following:
+    /// - `optimize_for`: [`Player::One`]
+    /// - `max_depth`: `18`
+    /// - `max_time`: [`None`]
+    /// - `iterative_deepening`: [`true`]
+    /// - `use_t_table`: [`true`]
+    /// - `move_orderer`: A function that returns the valid moves in descending order by pit number.
+    /// - `evaluator`: A function that returns the point differential between
+    ///   the players (positive if the current player is winning).
+    /// - `heuristic`: Same as evaluator.
+    /// - `t_table_capacity`: `0`
+    fn default() -> Self {
+        // Faster than sorting s.valid_moves() at each iteration.
+        let move_orderer = |s: &T| {
+            let mut moves = Vec::new();
+            if s.swap_allowed() {
+                moves.insert(0, Move::Swap);
+            }
+            for (i, pit) in s.board()[s.current_turn()].as_ref().iter().enumerate() {
+                if *pit > 0 {
+                    moves.insert(0, Move::Pit(i + 1));
+                }
+            }
+            moves
+        };
+        let evaluator = |s: &T, p: Player| match p {
+            Player::One => (s.score(Player::One) as isize - s.score(Player::Two) as isize) as f32,
+            Player::Two => (s.score(Player::Two) as isize - s.score(Player::One) as isize) as f32,
+        };
+        let heuristic = evaluator;
+        Self {
+            optimize_for: Player::One,
+            max_depth: Some(18),
+            max_time: None,
+            iterative_deepening: true,
+            use_t_table: true,
+            move_orderer,
+            evaluator,
+            heuristic,
+            t_table_capacity: 0,
+        }
+    }
+}
+
+impl<T: MancalaZobrist> From<Minimax<T>> for MinimaxBuilder<T> {
+    fn from(value: Minimax<T>) -> Self {
+        from_common(&value)
+    }
+}
+
+impl<T: MancalaZobrist> From<&Minimax<T>> for MinimaxBuilder<T> {
+    fn from(value: &Minimax<T>) -> Self {
+        from_common(value)
+    }
 }
 
 impl<T: MancalaZobrist> MinimaxBuilder<T> {
     /// Construct a new [`MinimaxBuilder`] instance using the default configuration.
     ///
     /// See [`MinimaxBuilder::default`] for details.
+    #[inline]
     pub fn new() -> Self {
         Self::default()
     }
@@ -43,8 +103,8 @@ impl<T: MancalaZobrist> MinimaxBuilder<T> {
     /// which may take an intractable amount of time.
     ///
     /// </div>
-    pub fn max_depth(mut self, depth: Option<usize>) -> Self {
-        self.max_depth = depth;
+    pub fn max_depth(mut self, d: Option<usize>) -> Self {
+        self.max_depth = d;
         self
     }
 
@@ -59,8 +119,8 @@ impl<T: MancalaZobrist> MinimaxBuilder<T> {
     /// which may take an intractable amount of time.
     ///
     /// </div>
-    pub fn max_time(mut self, time: Option<Duration>) -> Self {
-        self.max_time = time;
+    pub fn max_time(mut self, t: Option<Duration>) -> Self {
+        self.max_time = t;
         self
     }
 
@@ -108,8 +168,20 @@ impl<T: MancalaZobrist> MinimaxBuilder<T> {
         self
     }
 
+    /// Set the initial transposition table capacity.
+    pub fn t_table_capacity(mut self, c: usize) -> Self {
+        self.t_table_capacity = c;
+        self
+    }
+
     /// Construct a [`Minimax`] instance based on the set configuration.
     pub fn build(&self) -> Minimax<T> {
+        // Initially size the transposition table.
+        let mut t_table = FxHashMap::default();
+        if self.use_t_table {
+            t_table.reserve(self.t_table_capacity);
+        }
+
         Minimax {
             optimize_for: self.optimize_for,
             max_depth: self.max_depth,
@@ -120,50 +192,23 @@ impl<T: MancalaZobrist> MinimaxBuilder<T> {
             evaluator: self.evaluator,
             heuristic: self.heuristic,
             start_time: None.into(),
-            t_table: Default::default(),
+            t_table: t_table.into(),
+            z_data: Default::default(),
         }
     }
 }
 
-impl<T: MancalaZobrist> Default for MinimaxBuilder<T> {
-    /// The default [`Minimax`] configuration is the following:
-    /// - `optimize_for`: [`Player::One`]
-    /// - `max_depth`: `12`
-    /// - `max_time`: [`None`]
-    /// - `iterative_deepening`: [`false`]
-    /// - `use_t_table`: [`false`]
-    /// - `move_orderer`: A function that returns the valid moves in descending order by pit number.
-    /// - `evaluator`: A function that returns the point differential between
-    ///   the players (positive if the current player is winning).
-    /// - `heuristic` Same as evaluator.
-    fn default() -> Self {
-        // Faster than sorting s.valid_moves() at each iteration.
-        let move_orderer = |s: &T| {
-            let mut moves = Vec::new();
-            if s.swap_allowed() {
-                moves.insert(0, Move::Swap);
-            }
-            for (i, pit) in s.board()[s.current_turn()].as_ref().iter().enumerate() {
-                if *pit > 0 {
-                    moves.insert(0, Move::Pit(i + 1));
-                }
-            }
-            moves
-        };
-        let evaluator = |s: &T, p: Player| match p {
-            Player::One => (s.score(Player::One) as isize - s.score(Player::Two) as isize) as f32,
-            Player::Two => (s.score(Player::Two) as isize - s.score(Player::One) as isize) as f32,
-        };
-        let heuristic = evaluator;
-        Self {
-            optimize_for: Player::One,
-            max_depth: Some(12),
-            max_time: None,
-            iterative_deepening: false,
-            use_t_table: false,
-            move_orderer,
-            evaluator,
-            heuristic,
-        }
+/// Helper function for implementing the [`From`] trait.
+fn from_common<T: MancalaZobrist>(value: &Minimax<T>) -> MinimaxBuilder<T> {
+    MinimaxBuilder {
+        optimize_for: value.optimize_for,
+        max_depth: value.max_depth,
+        max_time: value.max_time,
+        iterative_deepening: value.iterative_deepening,
+        use_t_table: value.use_t_table,
+        move_orderer: value.move_orderer,
+        evaluator: value.evaluator,
+        heuristic: value.heuristic,
+        t_table_capacity: value.t_table.borrow().capacity(),
     }
 }
