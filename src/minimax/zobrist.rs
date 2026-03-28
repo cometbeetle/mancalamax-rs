@@ -18,8 +18,8 @@ pub enum ZobristAction {
 /// which can be used to update the Zobrist hash of a game state.
 #[derive(Debug, Clone)]
 pub struct ZobristData {
-    pit_vals: Box<Vec<u64>>,
-    store_vals: Box<Vec<u64>>,
+    pit_vals: Vec<u64>,
+    store_vals: Vec<u64>,
     switch_turn_val: u64,
     p2_moved_val: u64,
 }
@@ -33,8 +33,8 @@ impl Default for ZobristData {
     fn default() -> Self {
         let mut rng = rand::rng();
         Self {
-            pit_vals: vec![].into(),
-            store_vals: vec![].into(),
+            pit_vals: vec![],
+            store_vals: vec![],
             switch_turn_val: rng.next_u64(),
             p2_moved_val: rng.next_u64(),
         }
