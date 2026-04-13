@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 /// was never used in finding the current result (i.e., the search evaluated all
 /// possible terminal states).
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SearchResult {
     pub found_move: Move,
     pub utility: f32,
@@ -29,6 +30,7 @@ pub struct SearchResult {
 /// corresponding utility value in the [`utilities`][Self::utilities] field
 /// at the same index.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MultiSearchResult {
     pub found_moves: Vec<Move>,
     pub utilities: Vec<f32>,
@@ -143,7 +145,7 @@ impl<T: MancalaZobrist> Minimax<T> {
         // Ensure the current Zobrist values are valid.
         if !self.z_data.borrow().is_valid_for(state) {
             self.z_data
-                .replace(ZobristData::for_state_like(state, 0x49CB86856BB06133));
+                .replace(ZobristData::for_states_like(state, 0x49CB86856BB06133));
         }
 
         if self.iterative_deepening {
@@ -207,7 +209,7 @@ impl<T: MancalaZobrist> Minimax<T> {
         // Ensure the current Zobrist values are valid.
         if !self.z_data.borrow().is_valid_for(state) {
             self.z_data
-                .replace(ZobristData::for_state_like(state, 0x49CB86856BB06133));
+                .replace(ZobristData::for_states_like(state, 0x49CB86856BB06133));
         }
 
         if self.iterative_deepening {
@@ -595,6 +597,7 @@ impl<T: MancalaZobrist> Minimax<T> {
 }
 
 /// Helper enum to store the internal results of minimax searches.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 enum InternalResult {
     Node {
         found_move: Option<Move>,
@@ -606,6 +609,7 @@ enum InternalResult {
 
 /// Helper enum to store transposition table entry bounds.
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 enum ValueBound {
     Exact,
     Lower,
@@ -614,6 +618,7 @@ enum ValueBound {
 
 /// Helper struct for storing data in the transposition table.
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct TTEntry {
     utility: f32,
     bound: ValueBound,

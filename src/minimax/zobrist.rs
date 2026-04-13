@@ -7,6 +7,7 @@ use rand::{Rng, SeedableRng};
 /// Enum used to represent an action that should be recorded by the
 /// Zobrist hashing system.
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ZobristAction {
     Pit(Player, usize, usize),
     Store(Player, usize),
@@ -17,6 +18,7 @@ pub enum ZobristAction {
 /// Struct used to store appropriately sized tables of Zobrist values
 /// which can be used to update the Zobrist hash of a game state.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ZobristData {
     pit_vals: Vec<u64>,
     store_vals: Vec<u64>,
@@ -59,7 +61,7 @@ impl ZobristData {
     /// Create a new set of Zobrist values for use with game states "like" the
     /// supplied state. Here, "like" means the state must have the same
     /// number of total stones and the same number of pits.
-    pub fn for_state_like(state: &impl Mancala, seed: u64) -> Self {
+    pub fn for_states_like(state: &impl Mancala, seed: u64) -> Self {
         let mut rng = StdRng::seed_from_u64(seed);
 
         let pits: Vec<u64> = {

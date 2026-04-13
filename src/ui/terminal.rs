@@ -11,7 +11,6 @@ use std::time::Duration;
 
 /// Enum specifying which file IO interface to use for external players.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ExternalInterface {
     Full,
     Minimal,

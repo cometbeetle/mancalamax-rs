@@ -6,6 +6,7 @@ use super::mancala::{Mancala, Player};
 use crate::minimax::MancalaZobrist;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
+use std::ops::{Deref, DerefMut};
 
 /// Stores the necessary components of a Mancala game, including the board,
 /// each player's store, the current ply, and the player currently allowed to move.
@@ -19,36 +20,16 @@ use std::hash::Hash;
 /// and from [`DynGameState`] structs.
 ///
 /// If the `serde` feature is enabled, this struct will be serializable and
-/// deserializable, via automatic conversion to and from [`DynGameState`].
+/// deserializable.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct GameState<const N: usize> {
-    board: [[usize; N]; 2],
+    board: [BoardArray<N>; 2],
     stores: [usize; 2],
     ply: usize,
     current_turn: Player,
     p2_moved: bool,
     zobrist_hash: u64,
-}
-
-#[cfg(feature = "serde")]
-impl<const N: usize> serde::Serialize for GameState<N> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serde::Serialize::serialize(&DynGameState::from(*self), serializer)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'a, const N: usize> serde::Deserialize<'a> for GameState<N> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'a>,
-    {
-        let dyn_state = DynGameState::deserialize(deserializer)?;
-        Ok(GameState::from(dyn_state))
-    }
 }
 
 impl<const N: usize> Display for GameState<N> {
@@ -64,7 +45,8 @@ impl Default for GameState<6> {
     /// empty.
     fn default() -> Self {
         Self {
-            board: [[4; 6]; 2],
+            board: [BoardArray([4; 6]); 2],
+            //board: [[4; 6]; 2],
             stores: [0, 0],
             ply: 1,
             current_turn: Player::One,
@@ -75,7 +57,7 @@ impl Default for GameState<6> {
 }
 
 impl<const N: usize> Mancala for GameState<N> {
-    type Board = [usize; N];
+    type Board = BoardArray<N>;
 
     #[inline]
     fn pits(&self) -> usize {
@@ -163,10 +145,10 @@ impl<const N: usize> From<DynGameState> for GameState<N> {
             value.board()[1].len(),
             N
         );
-        let mut board = [[0; N]; 2];
+        let mut board = [BoardArray([0; N]); 2];
         for i in 0..2 {
             for j in 0..N {
-                board[i][j] = value.board()[i][j];
+                board[i].as_mut()[j] = value.board()[i][j];
             }
         }
         Self {
@@ -192,7 +174,7 @@ impl<const N: usize> GameState<N> {
         p2_moved: bool,
     ) -> Self {
         Self {
-            board: [[stones_per; N]; 2],
+            board: [BoardArray([stones_per; N]); 2],
             stores: [store_1, store_2],
             ply,
             current_turn,
@@ -232,10 +214,10 @@ impl<const N: usize> GameState<N> {
             board[1].len(),
             N
         );
-        let mut arr = [[0; N]; 2];
+        let mut arr = [BoardArray([0; N]); 2];
         for i in 0..2 {
             for j in 0..N {
-                arr[i][j] = board[i][j];
+                arr[i].as_mut()[j] = board[i][j];
             }
         }
         Self {
@@ -258,12 +240,47 @@ impl<const N: usize> GameState<N> {
         p2_moved: bool,
     ) -> Self {
         Self {
-            board,
+            board: [BoardArray(board[0]), BoardArray(board[1])],
             stores: [store_1, store_2],
             ply,
             current_turn,
             p2_moved,
             zobrist_hash: 0,
         }
+    }
+}
+
+/// Wrapper for board arrays to enable serialization and deserialization
+/// with `serde`. Implements the [`Deref`] and [`DerefMut`] traits to
+/// pass through method calls to the wrapped array.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct BoardArray<const N: usize>(
+    #[cfg_attr(feature = "serde", serde(with = "serde_arrays"))] [usize; N],
+);
+
+impl<const N: usize> AsRef<[usize]> for BoardArray<N> {
+    fn as_ref(&self) -> &[usize] {
+        &self.0
+    }
+}
+
+impl<const N: usize> AsMut<[usize]> for BoardArray<N> {
+    fn as_mut(&mut self) -> &mut [usize] {
+        &mut self.0
+    }
+}
+
+impl<const N: usize> Deref for BoardArray<N> {
+    type Target = [usize];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<const N: usize> DerefMut for BoardArray<N> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
