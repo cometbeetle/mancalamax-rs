@@ -20,10 +20,10 @@ pub enum ZobristAction {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ZobristData {
-    pit_vals: Vec<u64>,
-    store_vals: Vec<u64>,
-    switch_turn_val: u64,
-    p2_moved_val: u64,
+    pub pit_vals: Vec<u64>,
+    pub store_vals: Vec<u64>,
+    pub switch_turn_val: u64,
+    pub p2_moved_val: u64,
 }
 
 impl Default for ZobristData {

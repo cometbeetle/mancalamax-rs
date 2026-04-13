@@ -264,7 +264,9 @@ pub fn minimax_v_external<T: MancalaZobrist, P: AsRef<Path>>(
         println!("{}", s);
         if s.current_turn() == external_player {
             let chosen_move = external_move_input(&s, interface, comm_dir, current_move);
-            s = s.make_move(chosen_move).unwrap();
+            s = s
+                .make_move_zobrist(&minimax.z_data().borrow(), chosen_move)
+                .unwrap();
             println!("EXTERNAL SELECTED: {:?}\n", chosen_move);
             current_move += 1;
         } else {
