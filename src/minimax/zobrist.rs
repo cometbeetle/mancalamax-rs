@@ -31,7 +31,7 @@ impl Default for ZobristData {
     /// useful, since the internal vectors which store the Zobrist values
     /// are initialized as empty.
     ///
-    /// To create an instance with useful data, call [`for_state_like`][Self::for_state_like].
+    /// To create an instance with useful data, call [`for_states_like`][Self::for_states_like].
     fn default() -> Self {
         let mut rng = rand::rng();
         Self {
