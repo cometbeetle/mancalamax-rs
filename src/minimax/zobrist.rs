@@ -6,7 +6,7 @@ use rand::{Rng, SeedableRng};
 
 /// Enum used to represent an action that should be recorded by the
 /// Zobrist hashing system.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ZobristAction {
     Pit(Player, usize, usize),
@@ -17,7 +17,7 @@ pub enum ZobristAction {
 
 /// Struct used to store appropriately sized tables of Zobrist values
 /// which can be used to update the Zobrist hash of a game state.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ZobristData {
     pub pit_vals: Vec<u64>,
@@ -172,9 +172,7 @@ fn perform_updates<T: MancalaZobrist>(data: &ZobristData, old_state: &T, new_sta
             }
             let old = ZobristAction::Pit(player, pit, old_count);
             let new = ZobristAction::Pit(player, pit, new_count);
-            match new_state.update_zobrist_hash(data, old, new) {
-                _ => {}
-            }
+            new_state.update_zobrist_hash(data, old, new);
         }
         let old_score = old_state.score(player);
         let new_score = new_state.score(player);
@@ -183,18 +181,12 @@ fn perform_updates<T: MancalaZobrist>(data: &ZobristData, old_state: &T, new_sta
         }
         let old = ZobristAction::Store(player, old_state.score(player));
         let new = ZobristAction::Store(player, new_state.score(player));
-        match new_state.update_zobrist_hash(data, old, new) {
-            _ => {}
-        }
+        new_state.update_zobrist_hash(data, old, new)
     }
     if new_state.current_turn() != old_state.current_turn() {
-        match new_state.update_zobrist_hash_partial(data, ZobristAction::SwitchTurn) {
-            _ => {}
-        }
+        new_state.update_zobrist_hash_partial(data, ZobristAction::SwitchTurn);
     }
     if new_state.p2_moved() != old_state.p2_moved() {
-        match new_state.update_zobrist_hash_partial(data, ZobristAction::P2Moved) {
-            _ => {}
-        }
+        new_state.update_zobrist_hash_partial(data, ZobristAction::P2Moved);
     }
 }

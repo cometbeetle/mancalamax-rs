@@ -1,7 +1,7 @@
 //use burn::data::dataset::Dataset;
 use mancalamax::game::{DynGameState, GameState};
 use mancalamax::game::{Mancala, Move, Player};
-use mancalamax::minimax::MinimaxBuilder;
+use mancalamax::minimax::{MinimaxBuilder, ParMinimaxBuilder};
 //use mancalamax::ml::MancalaDataset;
 use mancalamax::ui::{
     ExternalInterface, minimax_v_external, minimax_v_minimax, player_v_external, player_v_minimax,
@@ -9,20 +9,53 @@ use mancalamax::ui::{
 };
 
 fn main() {
+    // TODO: We have an issue where if the same minimax object is reused with a different
+    //       state that starts at a different hash, the table entries will all be invalid.
+    //       Need some way to invalidate the TT, and clear it in that case.
+
     //player_v_player_default();
     //player_v_minimax_default(Player::One);
+    let par_minimax = ParMinimaxBuilder::new()
+        .max_depth(Some(7))
+        .iterative_deepening(true)
+        .use_t_table(true)
+        .max_time(None)
+        .t_table_buckets(5000000 * 2 * 2 * 2);
     let minimax = MinimaxBuilder::new()
-        .max_depth(Some(18))
+        .max_depth(Some(7))
         .iterative_deepening(true)
         .use_t_table(true)
         .max_time(None);
-    minimax_v_minimax(
-        &GameState::default(),
-        &minimax,
-        &minimax.optimize_for(Player::Two),
-    );
+    let start = std::time::Instant::now();
+    //minimax_v_minimax(
+    //    &GameState::<6>::new(16, 0, 0, Player::One, 0, false),
+    //    &minimax,
+    //    &minimax.optimize_for(Player::Two),
+    //);
+    let result =
+        par_minimax
+            .build()
+            .search_utility(&GameState::<36>::new(12, 0, 0, Player::One, 0, false));
     //let result = minimax.build().search_utility(&GameState::default());
-    //println!("{:?}", result);
+    println!("{:?}", result);
+    let end = std::time::Instant::now();
+    println!("{}", (end - start).as_secs_f32());
+
+    let start = std::time::Instant::now();
+    //minimax_v_minimax(
+    //    &GameState::<6>::new(16, 0, 0, Player::One, 0, false),
+    //    &minimax,
+    //    &minimax.optimize_for(Player::Two),
+    //);
+    let result =
+        minimax
+            .build()
+            .search_utility(&GameState::<36>::new(12, 0, 0, Player::One, 0, false));
+    //let result = minimax.build().search_utility(&GameState::default());
+    println!("{:?}", result);
+    let end = std::time::Instant::now();
+    println!("{}", (end - start).as_secs_f32());
+
     //mancalamax::ui::gui::make_gui();
     //println!("{:?}", GameState::default().valid_moves());
 

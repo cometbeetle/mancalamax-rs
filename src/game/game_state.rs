@@ -46,7 +46,6 @@ impl Default for GameState<6> {
     fn default() -> Self {
         Self {
             board: [BoardArray([4; 6]); 2],
-            //board: [[4; 6]; 2],
             stores: [0, 0],
             ply: 1,
             current_turn: Player::One,

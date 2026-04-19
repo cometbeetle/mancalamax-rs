@@ -1,19 +1,29 @@
 //! Implementation of the minimax algorithm with alpha-beta pruning for Mancala.
 
-use super::builder::MinimaxBuilder;
-use super::table::TTEntry;
-use super::zobrist::{MancalaZobrist, ZobristData};
-use super::{InternalResult, MoveOrderFn, MultiSearchResult, SearchResult, StateEvalFn};
+use super::table::{TTEntry, TTable};
+use super::{
+    InternalResult, MancalaZobrist, MoveOrderFn, MultiSearchResult, ParMinimaxBuilder,
+    SearchResult, StateEvalFn, ZobristData,
+};
 use crate::game::{Move, Player};
-use rustc_hash::FxHashMap;
-use std::cell::{Cell, RefCell};
+use std::sync::RwLock;
+use std::thread;
 use std::time::{Duration, Instant};
 
-/// Stores the necessary information for executing the minimax algorithm on a
-/// Mancala board state in order to determine the most optimal move (i.e.,
+static MAX_SPAWN_DEPTH: usize = 1; // TODO: This is ok. Need to test against original algorithm.
+static MIN_SPAWN_LIMIT: usize = 4;
+
+// TODO: Interestingly, only better with iterative deepening with these settings.
+
+// TODO: Clean up, and just compare separate TTs vs. shared TT vs. fully sequential.
+// TODO: Then do VTune analysis of cache, how long waiting for stuff, etc. Make detailed.
+// TODO: Mention cases where it happens to be faster under these restricted circumstances.
+
+/// Stores the necessary information for executing a parallelized variant of the minimax
+/// algorithm on a Mancala board state in order to determine the most optimal move (i.e.,
 /// the one that maximizes utility, or is calculated as best based on some heuristic).
-#[derive(Debug, Clone)]
-pub struct Minimax<T: MancalaZobrist> {
+#[derive(Debug)]
+pub struct ParMinimax<T: MancalaZobrist> {
     pub(super) optimize_for: Player,
     pub(super) max_depth: Option<usize>,
     pub(super) max_time: Option<Duration>,
@@ -22,26 +32,26 @@ pub struct Minimax<T: MancalaZobrist> {
     pub(super) move_orderer: MoveOrderFn<T>,
     pub(super) evaluator: StateEvalFn<T>,
     pub(super) heuristic: StateEvalFn<T>,
-    pub(super) start_time: Cell<Option<Instant>>,
-    pub(super) t_table: RefCell<FxHashMap<u64, TTEntry>>,
-    pub(super) z_data: RefCell<ZobristData>,
+    pub(super) start_time: RwLock<Option<Instant>>,
+    pub(super) t_table: TTable,
+    pub(super) z_data: RwLock<ZobristData>,
 }
 
-impl<T: MancalaZobrist> From<MinimaxBuilder<T>> for Minimax<T> {
-    /// Alias for [`MinimaxBuilder::build`].
-    fn from(value: MinimaxBuilder<T>) -> Self {
+impl<T: MancalaZobrist> From<ParMinimaxBuilder<T>> for ParMinimax<T> {
+    /// Alias for [`ParMinimaxBuilder::build`].
+    fn from(value: ParMinimaxBuilder<T>) -> Self {
         value.build()
     }
 }
 
-impl<T: MancalaZobrist> From<&MinimaxBuilder<T>> for Minimax<T> {
-    /// Alias for [`MinimaxBuilder::build`].
-    fn from(value: &MinimaxBuilder<T>) -> Self {
+impl<T: MancalaZobrist> From<&ParMinimaxBuilder<T>> for ParMinimax<T> {
+    /// Alias for [`ParMinimaxBuilder::build`].
+    fn from(value: &ParMinimaxBuilder<T>) -> Self {
         value.build()
     }
 }
 
-impl<T: MancalaZobrist> Minimax<T> {
+impl<T: MancalaZobrist> ParMinimax<T> {
     /// Returns the player for which minimax will optimize the outcome.
     #[inline]
     pub fn optimize_for(&self) -> Player {
@@ -75,12 +85,12 @@ impl<T: MancalaZobrist> Minimax<T> {
     /// Returns the start time (if currently running) of the algorithm.
     #[inline]
     pub fn start_time(&self) -> Option<Instant> {
-        self.start_time.get()
+        *self.start_time.read().unwrap()
     }
 
     /// Returns a reference to the current Zobrist data.
     #[inline]
-    pub fn z_data(&self) -> &RefCell<ZobristData> {
+    pub fn z_data(&self) -> &RwLock<ZobristData> {
         &self.z_data
     }
 
@@ -102,57 +112,73 @@ impl<T: MancalaZobrist> Minimax<T> {
         (self.heuristic)(state, self.optimize_for)
     }
 
-    /// Search for the optimal move using the minimax algorithm with
+    /// Search for the optimal move using the parallelized minimax algorithm with
     /// alpha-beta pruning, based on the set configuration parameters.
     ///
     /// If no move was found successfully, returns [`None`].
     pub fn search_utility(&self, state: &T) -> Option<SearchResult> {
-        self.start_time.set(Some(Instant::now()));
+        *self.start_time.write().unwrap() = Some(Instant::now());
         let mut found_move: Option<Move> = None;
         let mut utility = f32::NEG_INFINITY;
         let mut depth_searched: Option<usize> = self.max_depth;
         let mut fully_searched = false;
 
         // Ensure the current Zobrist values are valid.
-        if !self.z_data.borrow().is_valid_for(state) {
-            self.z_data
-                .replace(ZobristData::for_states_like(state, 0x49CB86856BB06133));
+        if !self.z_data.read().unwrap().is_valid_for(state) {
+            let mut z_data = self.z_data.write().unwrap();
+            *z_data = ZobristData::for_states_like(state, 0x49CB86856BB06133);
         }
 
-        if self.iterative_deepening {
-            for limit in 1usize.. {
-                if fully_searched
-                    || self.max_depth.is_some_and(|d| limit > d)
-                    || self.time_exceeded()
-                {
-                    break;
-                }
-                (found_move, utility, fully_searched) =
-                    match self.max_value(state, f32::NEG_INFINITY, f32::INFINITY, 0, Some(limit)) {
+        thread::scope(|s| {
+            if self.iterative_deepening {
+                for limit in 1usize.. {
+                    if fully_searched
+                        || self.max_depth.is_some_and(|d| limit > d)
+                        || self.time_exceeded()
+                    {
+                        break;
+                    }
+                    (found_move, utility, fully_searched) = match self.max_value(
+                        state,
+                        f32::NEG_INFINITY,
+                        f32::INFINITY,
+                        0,
+                        Some(limit),
+                        s,
+                    ) {
                         InternalResult::Node {
                             found_move: m,
                             utility: v,
                             fully_searched: f,
+                            ..
                         } if m.is_some() => {
                             depth_searched = Some(limit);
                             (m, v, f)
                         }
                         _ => break,
                     };
-            }
-        } else {
-            (found_move, utility, fully_searched) =
-                match self.max_value(state, f32::NEG_INFINITY, f32::INFINITY, 0, self.max_depth) {
+                }
+            } else {
+                (found_move, utility, fully_searched) = match self.max_value(
+                    state,
+                    f32::NEG_INFINITY,
+                    f32::INFINITY,
+                    0,
+                    self.max_depth,
+                    s,
+                ) {
                     InternalResult::Node {
                         found_move: m,
                         utility: v,
                         fully_searched: f,
+                        ..
                     } => (m, v, f),
                     _ => (found_move, utility, fully_searched),
                 }
-        }
+            }
+        });
 
-        self.start_time.set(None);
+        *self.start_time.write().unwrap() = None;
 
         match found_move {
             None => None,
@@ -174,13 +200,13 @@ impl<T: MancalaZobrist> Minimax<T> {
     ///
     /// If no moves could be successfully evaluated, returns [`None`].
     pub fn search_utility_all(&self, state: &T) -> Option<MultiSearchResult> {
-        self.start_time.set(Some(Instant::now()));
+        *self.start_time.write().unwrap() = Some(Instant::now());
         let mut result: Option<MultiSearchResult> = None;
 
         // Ensure the current Zobrist values are valid.
-        if !self.z_data.borrow().is_valid_for(state) {
-            self.z_data
-                .replace(ZobristData::for_states_like(state, 0x49CB86856BB06133));
+        if !self.z_data.read().unwrap().is_valid_for(state) {
+            let mut z_data = self.z_data.write().unwrap();
+            *z_data = ZobristData::for_states_like(state, 0x49CB86856BB06133);
         }
 
         if self.iterative_deepening {
@@ -200,11 +226,11 @@ impl<T: MancalaZobrist> Minimax<T> {
             result = self.max_value_all(state, 0, self.max_depth);
         };
 
-        self.start_time.set(None);
+        *self.start_time.write().unwrap() = None;
         result
     }
 
-    /// Search for the optimal move using the minimax algorithm with
+    /// Search for the optimal move using the parallelized minimax algorithm with
     /// alpha-beta pruning, based on the set configuration parameters.
     ///
     /// To also return the evaluated utility of the optimal move, call
@@ -219,7 +245,7 @@ impl<T: MancalaZobrist> Minimax<T> {
     ///
     /// Used internally inside [`max_value`] and [`min_value`].
     fn time_exceeded(&self) -> bool {
-        match (self.start_time.get(), self.max_time) {
+        match (*self.start_time.read().unwrap(), self.max_time) {
             (Some(start), Some(max)) => Instant::now() - start >= max,
             _ => false,
         }
@@ -234,7 +260,7 @@ impl<T: MancalaZobrist> Minimax<T> {
         limit: Option<usize>,
     ) -> Option<MultiSearchResult> {
         debug_assert!(
-            self.start_time.get().is_some(),
+            self.start_time.read().unwrap().is_some(),
             "Minimax search must be started with `search_utility_all()` before calling `max_value_all`"
         );
 
@@ -247,13 +273,29 @@ impl<T: MancalaZobrist> Minimax<T> {
         let mut move_util_term: Vec<(Move, f32, bool)> = Vec::new();
 
         for m in self.order_moves_with_tt(state) {
-            let new_state = state.make_move_zobrist(&self.z_data.borrow(), m).unwrap();
+            let new_state = state
+                .make_move_zobrist(&self.z_data.read().unwrap(), m)
+                .unwrap();
 
             let (utility, terminal) = {
                 let result = if new_state.current_turn() == state.current_turn() {
-                    self.max_value(&new_state, f32::NEG_INFINITY, f32::INFINITY, depth, limit)
+                    self.max_value(
+                        &new_state,
+                        f32::NEG_INFINITY,
+                        f32::INFINITY,
+                        depth,
+                        limit,
+                        todo!(),
+                    )
                 } else {
-                    self.min_value(&new_state, f32::NEG_INFINITY, f32::INFINITY, depth, limit)
+                    self.min_value(
+                        &new_state,
+                        f32::NEG_INFINITY,
+                        f32::INFINITY,
+                        depth,
+                        limit,
+                        todo!(),
+                    )
                 };
                 match result {
                     InternalResult::Node {
@@ -262,6 +304,7 @@ impl<T: MancalaZobrist> Minimax<T> {
                         ..
                     } => (v, f),
                     InternalResult::Timeout => return None,
+                    _ => todo!(),
                 }
             };
 
@@ -278,16 +321,21 @@ impl<T: MancalaZobrist> Minimax<T> {
 
     /// Maximize the utility / heuristic for a given state, and return the
     /// move and associated utility that do so.
-    fn max_value(
-        &self,
+    fn max_value<'scope, 'env>(
+        &'env self,
         state: &T,
         mut alpha: f32,
         mut beta: f32,
         depth: usize,
         limit: Option<usize>,
-    ) -> InternalResult {
+        scope: &'scope thread::Scope<'scope, 'env>,
+    ) -> InternalResult
+    where
+        T: 'env,
+        'env: 'scope,
+    {
         debug_assert!(
-            self.start_time.get().is_some(),
+            self.start_time.read().unwrap().is_some(),
             "Minimax search must be started with `search_utility()` before calling `max_value`"
         );
 
@@ -302,16 +350,28 @@ impl<T: MancalaZobrist> Minimax<T> {
         let mut found_move: Option<Move> = None;
         let mut fully_searched = true;
 
-        for m in self.order_moves_with_tt(state) {
-            let new_state = state.make_move_zobrist(&self.z_data.borrow(), m).unwrap();
+        let mut handles = Vec::new();
+
+        for (i, m) in self.order_moves_with_tt(state).iter().copied().enumerate() {
+            let new_state = state
+                .make_move_zobrist(&self.z_data.read().unwrap(), m)
+                .unwrap();
+            let parent_turn = state.current_turn();
+            let run_search = move |alpha, beta| {
+                if new_state.current_turn() == parent_turn {
+                    self.max_value(&new_state, alpha, beta, depth + 1, limit, scope)
+                } else {
+                    self.min_value(&new_state, alpha, beta, depth + 1, limit, scope)
+                }
+            };
+
+            if depth < MAX_SPAWN_DEPTH && limit.is_some_and(|l| l >= MIN_SPAWN_LIMIT) && i > 0 {
+                handles.push((m, scope.spawn(move || run_search(alpha, beta))));
+                continue;
+            }
 
             let (v2, local_terminal) = {
-                let result = if new_state.current_turn() == state.current_turn() {
-                    self.max_value(&new_state, alpha, beta, depth + 1, limit)
-                } else {
-                    self.min_value(&new_state, alpha, beta, depth + 1, limit)
-                };
-                match result {
+                match run_search(alpha, beta) {
                     InternalResult::Node {
                         utility: v,
                         fully_searched: f,
@@ -335,6 +395,25 @@ impl<T: MancalaZobrist> Minimax<T> {
             }
         }
 
+        for (m, h) in handles {
+            let (v2, local_terminal) = match h.join().unwrap() {
+                InternalResult::Node {
+                    utility: v,
+                    fully_searched: f,
+                    ..
+                } => (v, f),
+                InternalResult::Timeout => continue,
+            };
+
+            if v2 > v {
+                v = v2;
+                found_move = Some(m);
+                alpha = alpha.max(v);
+            }
+
+            fully_searched &= local_terminal;
+        }
+
         // Store results into the transition table, if necessary.
         self.tt_store(
             state,
@@ -355,16 +434,17 @@ impl<T: MancalaZobrist> Minimax<T> {
 
     /// Minimize the utility / heuristic for a given state, and return the
     /// move and associated utility that do so.
-    fn min_value(
-        &self,
+    fn min_value<'scope, 'env>(
+        &'env self,
         state: &T,
         mut alpha: f32,
         mut beta: f32,
         depth: usize,
         limit: Option<usize>,
+        scope: &'scope thread::Scope<'scope, 'env>,
     ) -> InternalResult {
         debug_assert!(
-            self.start_time.get().is_some(),
+            self.start_time.read().unwrap().is_some(),
             "Minimax search must be started with `search_utility()` before calling `min_value`"
         );
 
@@ -379,16 +459,28 @@ impl<T: MancalaZobrist> Minimax<T> {
         let mut found_move: Option<Move> = None;
         let mut fully_searched = true;
 
-        for m in self.order_moves_with_tt(state) {
-            let new_state = state.make_move_zobrist(&self.z_data.borrow(), m).unwrap();
+        let mut handles = Vec::new();
+
+        for (i, m) in self.order_moves_with_tt(state).iter().copied().enumerate() {
+            let new_state = state
+                .make_move_zobrist(&self.z_data.read().unwrap(), m)
+                .unwrap();
+            let parent_turn = state.current_turn();
+            let run_search = move |alpha, beta| {
+                if new_state.current_turn() == parent_turn {
+                    self.min_value(&new_state, alpha, beta, depth + 1, limit, scope)
+                } else {
+                    self.max_value(&new_state, alpha, beta, depth + 1, limit, scope)
+                }
+            };
+
+            if depth < MAX_SPAWN_DEPTH && limit.is_some_and(|l| l >= MIN_SPAWN_LIMIT) && i > 0 {
+                handles.push((m, scope.spawn(move || run_search(alpha, beta))));
+                continue;
+            }
 
             let (v2, local_terminal) = {
-                let result = if new_state.current_turn() == state.current_turn() {
-                    self.min_value(&new_state, alpha, beta, depth + 1, limit)
-                } else {
-                    self.max_value(&new_state, alpha, beta, depth + 1, limit)
-                };
-                match result {
+                match run_search(alpha, beta) {
                     InternalResult::Node {
                         utility: v,
                         fully_searched: f,
@@ -410,6 +502,25 @@ impl<T: MancalaZobrist> Minimax<T> {
             if v <= alpha {
                 break;
             }
+        }
+
+        for (m, h) in handles {
+            let (v2, local_terminal) = match h.join().unwrap() {
+                InternalResult::Node {
+                    utility: v,
+                    fully_searched: f,
+                    ..
+                } => (v, f),
+                InternalResult::Timeout => continue,
+            };
+
+            if v2 < v {
+                v = v2;
+                found_move = Some(m);
+                beta = beta.min(v);
+            }
+
+            fully_searched &= local_terminal;
         }
 
         // Store results into the transition table, if necessary.
@@ -461,8 +572,10 @@ impl<T: MancalaZobrist> Minimax<T> {
         }
 
         // Check transposition table, and narrow bounds if necessary.
-        if let Some(r) = self.tt_probe(state, remaining, alpha, beta) {
-            return (Some(r), alpha_orig, beta_orig, remaining);
+        if self.use_t_table {
+            if let Some(r) = self.tt_probe(state, remaining, alpha, beta) {
+                return (Some(r), alpha_orig, beta_orig, remaining);
+            }
         }
 
         // If we have reached the artificial depth limit, use the heuristic.
@@ -502,8 +615,7 @@ impl<T: MancalaZobrist> Minimax<T> {
         }
 
         self.t_table
-            .borrow()
-            .get(&state.zobrist_hash())
+            .get(state.zobrist_hash())
             .and_then(|e| e.probe(remaining, alpha, beta))
     }
 
@@ -531,11 +643,10 @@ impl<T: MancalaZobrist> Minimax<T> {
             alpha_orig,
             beta_orig,
         );
-        let mut table = self.t_table.borrow_mut();
-        if table.get(&key).is_none_or(|old| {
+        if self.t_table.get(key).is_none_or(|old| {
             (entry.remaining >= old.remaining) || (entry.fully_searched && !old.fully_searched)
         }) {
-            table.insert(key, entry);
+            self.t_table.insert(key, entry);
         }
     }
 
@@ -543,8 +654,7 @@ impl<T: MancalaZobrist> Minimax<T> {
     /// transposition table entry, if one exists.
     fn get_tt_move(&self, state: &T) -> Option<Move> {
         self.t_table
-            .borrow()
-            .get(&state.zobrist_hash())
+            .get(state.zobrist_hash())
             .and_then(|e| e.found_move)
     }
 
