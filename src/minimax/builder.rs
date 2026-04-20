@@ -7,7 +7,6 @@ use super::zobrist::MancalaZobrist;
 use super::{MoveOrderFn, StateEvalFn};
 use crate::game::{Move, Player};
 use rustc_hash::FxHashMap;
-use std::sync::Mutex;
 use std::time::Duration;
 
 /// Helper for constructing [`Minimax`] instances based on certain specifications.
@@ -243,7 +242,7 @@ impl<T: MancalaZobrist> Default for ParMinimaxBuilder<T> {
     /// - `evaluator`: A function that returns the point differential between
     ///   the players (positive if the current player is winning).
     /// - `heuristic`: Same as evaluator.
-    /// - `t_table_buckets`: `1`
+    /// - `t_table_buckets`: `4096`
     /// - `shared_t_table`: [`true`]
     fn default() -> Self {
         // Faster than sorting s.valid_moves() at each iteration.
@@ -273,7 +272,7 @@ impl<T: MancalaZobrist> Default for ParMinimaxBuilder<T> {
             move_orderer,
             evaluator,
             heuristic,
-            t_table_buckets: 1,
+            t_table_buckets: 4096,
             shared_t_table: true,
         }
     }
@@ -383,7 +382,13 @@ impl<T: MancalaZobrist> ParMinimaxBuilder<T> {
     }
 
     /// Set the initial number of shared transposition table buckets.
+    /// Must be a positive power of two (e.g., `4096`).
     pub fn t_table_buckets(mut self, n: usize) -> Self {
+        assert!(n > 0, "t_table_buckets must be greater than 0");
+        assert!(
+            n.is_power_of_two(),
+            "t_table_buckets must be a power of two"
+        );
         self.t_table_buckets = n;
         self
     }

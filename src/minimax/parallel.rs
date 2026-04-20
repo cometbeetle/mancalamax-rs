@@ -95,6 +95,12 @@ impl<T: MancalaZobrist> ParMinimax<T> {
         &self.z_data
     }
 
+    /// Returns the number of shared transposition table buckets.
+    #[inline]
+    pub fn t_table_buckets(&self) -> usize {
+        self.t_table.n_buckets()
+    }
+
     /// Returns whether a shared transposition table will be used (as
     /// opposed to separate, per-thread tables).
     #[inline]

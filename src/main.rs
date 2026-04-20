@@ -20,7 +20,7 @@ fn main() {
         .iterative_deepening(true)
         .use_t_table(true)
         .max_time(None)
-        .t_table_buckets(5000000 * 2 * 2 * 2)
+        .t_table_buckets(4096)
         .shared_t_table(true);
     let minimax = MinimaxBuilder::new()
         .max_depth(Some(7))
@@ -33,10 +33,9 @@ fn main() {
     //    &minimax,
     //    &minimax.optimize_for(Player::Two),
     //);
-    let result =
-        par_minimax
-            .build()
-            .search_utility(&GameState::<36>::new(12, 0, 0, Player::One, 0, false));
+    let result = par_minimax
+        .build()
+        .search_utility_all(&GameState::<36>::new(12, 0, 0, Player::One, 0, false));
     //let result = minimax.build().search_utility(&GameState::default());
     println!("{:?}", result);
     let end = std::time::Instant::now();
@@ -51,7 +50,7 @@ fn main() {
     let result =
         minimax
             .build()
-            .search_utility(&GameState::<36>::new(12, 0, 0, Player::One, 0, false));
+            .search_utility_all(&GameState::<36>::new(12, 0, 0, Player::One, 0, false));
     //let result = minimax.build().search_utility(&GameState::default());
     println!("{:?}", result);
     let end = std::time::Instant::now();

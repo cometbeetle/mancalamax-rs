@@ -2,7 +2,8 @@
 
 use super::InternalResult;
 use crate::game::Move;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use rustc_hash::FxHashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LockResult, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError};
 
 /// Helper struct for storing data in the transposition table.
@@ -91,128 +92,62 @@ pub(super) enum ValueBound {
     Upper,
 }
 
-/// Implementation of a concurrent, auto-expanding transposition table
+/// Implementation of a fixed-size, concurrent, sharded transposition table
 /// with per-bucket locks.
 #[derive(Debug)]
-pub(super) struct TTable {
-    container: PriorityLock<TableContainer>,
-    expanding: AtomicBool,
+pub(crate) struct TTable {
+    buckets: Vec<PriorityLock<FxHashMap<u64, TTEntry>>>,
+    size: AtomicUsize,
 }
 
 impl TTable {
-    pub(super) fn new(init_size: usize) -> Self {
-        assert!(init_size > 0, "TTable init_size must be greater than 0");
+    pub(super) fn new(n_buckets: usize) -> Self {
+        assert!(n_buckets > 0, "n_buckets must be greater than 0");
+        assert!(
+            n_buckets.is_power_of_two(),
+            "n_buckets must be a power of two"
+        );
 
-        let mut buckets = Vec::with_capacity(init_size);
-        for _ in 0..init_size {
-            buckets.push(RwLock::new(Vec::new()));
+        let mut buckets = Vec::with_capacity(n_buckets);
+        for _ in 0..n_buckets {
+            buckets.push(PriorityLock::new(FxHashMap::default()));
         }
 
-        let container = PriorityLock::new(TableContainer {
+        Self {
             buckets,
             size: AtomicUsize::new(0),
-        });
-
-        Self {
-            container,
-            expanding: AtomicBool::new(false),
         }
     }
 
     pub(super) fn insert(&self, hash: u64, entry: TTEntry) {
-        let temp_guard = self.container.read().unwrap();
-
-        // If we need to expand the table, do so, and then continue.
-        let size = temp_guard.size.load(Ordering::Relaxed) as f32;
-        let n_buckets = temp_guard.buckets.len() as f32;
-        let container = if size / n_buckets > 0.75 {
-            if self
-                .expanding
-                .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
-                .is_err()
-            {
-                temp_guard
-            } else {
-                drop(temp_guard);
-                self.expand();
-                self.container.read().unwrap()
-            }
-        } else {
-            temp_guard
-        };
-
-        let idx = self.bucket_idx(&container, hash);
-        let mut bucket = container.buckets[idx].write().unwrap();
-        for (k, e) in bucket.iter_mut() {
-            if *k == hash {
-                *e = entry;
-                return;
-            }
-        }
-        bucket.push((hash, entry));
-        container.size.fetch_add(1, Ordering::Relaxed);
+        let idx = self.bucket_idx(hash);
+        let mut bucket = self.buckets[idx].write().unwrap();
+        self.size.fetch_add(1, Ordering::Relaxed);
+        bucket.insert(hash, entry);
     }
 
     pub(super) fn get(&self, hash: u64) -> Option<TTEntry> {
-        let container = self.container.read().unwrap();
-        let idx = self.bucket_idx(&container, hash);
-        let bucket = container.buckets[idx].read().unwrap();
-        for (k, e) in bucket.iter() {
-            if *k == hash {
-                return Some(*e);
-            }
-        }
-        None
+        let idx = self.bucket_idx(hash);
+        let bucket = self.buckets[idx].read().unwrap();
+        bucket.get(&hash).copied()
     }
 
     pub(super) fn remove(&mut self, hash: u64) -> Option<TTEntry> {
-        let container = self.container.read().unwrap();
-        let idx = self.bucket_idx(&container, hash);
-        let mut bucket = container.buckets[idx].write().unwrap();
-        let pos = bucket.iter().position(|(k, _)| *k == hash)?;
-        container.size.fetch_sub(1, Ordering::Relaxed);
-        Some(bucket.swap_remove(pos).1)
+        let idx = self.bucket_idx(hash);
+        let mut bucket = self.buckets[idx].write().unwrap();
+        self.size.fetch_sub(1, Ordering::Relaxed);
+        bucket.remove(&hash)
     }
 
+    #[inline]
     pub(super) fn n_buckets(&self) -> usize {
-        self.container.read().unwrap().buckets.len()
+        self.buckets.len()
     }
 
-    fn bucket_idx(&self, guard: &RwLockReadGuard<TableContainer>, key: u64) -> usize {
-        key as usize % guard.buckets.len()
+    #[inline]
+    fn bucket_idx(&self, key: u64) -> usize {
+        key as usize & (self.n_buckets() - 1)
     }
-
-    fn expand(&self) {
-        let mut container = self.container.write().unwrap();
-        let n_buckets = container.buckets.len() * 2;
-        let mut buckets = Vec::with_capacity(n_buckets);
-        for _ in 0..n_buckets {
-            buckets.push(RwLock::new(Vec::new()));
-        }
-        let new_container = TableContainer {
-            buckets,
-            size: AtomicUsize::new(0),
-        };
-        for bucket in container.buckets.drain(..) {
-            let mut bucket = bucket.write().unwrap();
-            for (k, e) in bucket.drain(..) {
-                let idx = k as usize % n_buckets;
-                let mut bucket = new_container.buckets[idx].write().unwrap();
-                bucket.push((k, e));
-            }
-        }
-        new_container
-            .size
-            .store(container.size.load(Ordering::Relaxed), Ordering::Relaxed);
-        *container = new_container;
-        self.expanding.store(false, Ordering::Relaxed);
-    }
-}
-
-#[derive(Debug)]
-struct TableContainer {
-    buckets: Vec<RwLock<Vec<(u64, TTEntry)>>>,
-    size: AtomicUsize,
 }
 
 #[derive(Debug)]
@@ -224,6 +159,9 @@ struct PriorityLock<T> {
 /// Reader-writer lock that gives writers priority. Readers can only
 /// acquire the lock if no writers currently hold the lock, and if no
 /// writers are currently waiting for the lock.
+///
+/// This helps prevent cases where writers are starved, which would prevent
+/// updates to the transposition table from succeeding in a timely manner.
 impl<T> PriorityLock<T> {
     fn new(t: T) -> Self {
         Self {
