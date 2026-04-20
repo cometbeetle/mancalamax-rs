@@ -243,7 +243,6 @@ impl<T: MancalaZobrist> Minimax<T> {
             return None;
         }
 
-        let depth = depth + 1;
         let mut move_util_term: Vec<(Move, f32, bool)> = Vec::new();
 
         for m in self.order_moves_with_tt(state) {
@@ -251,9 +250,21 @@ impl<T: MancalaZobrist> Minimax<T> {
 
             let (utility, terminal) = {
                 let result = if new_state.current_turn() == state.current_turn() {
-                    self.max_value(&new_state, f32::NEG_INFINITY, f32::INFINITY, depth, limit)
+                    self.max_value(
+                        &new_state,
+                        f32::NEG_INFINITY,
+                        f32::INFINITY,
+                        depth + 1,
+                        limit,
+                    )
                 } else {
-                    self.min_value(&new_state, f32::NEG_INFINITY, f32::INFINITY, depth, limit)
+                    self.min_value(
+                        &new_state,
+                        f32::NEG_INFINITY,
+                        f32::INFINITY,
+                        depth + 1,
+                        limit,
+                    )
                 };
                 match result {
                     InternalResult::Node {

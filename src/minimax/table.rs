@@ -91,7 +91,8 @@ pub(super) enum ValueBound {
     Upper,
 }
 
-/// Implementation of a concurrent transposition table with per-bucket locks.
+/// Implementation of a concurrent, auto-expanding transposition table
+/// with per-bucket locks.
 #[derive(Debug)]
 pub(super) struct TTable {
     container: PriorityLock<TableContainer>,
@@ -104,7 +105,7 @@ impl TTable {
 
         let mut buckets = Vec::with_capacity(init_size);
         for _ in 0..init_size {
-            buckets.push(PriorityLock::new(Vec::new()));
+            buckets.push(RwLock::new(Vec::new()));
         }
 
         let container = PriorityLock::new(TableContainer {
@@ -131,9 +132,6 @@ impl TTable {
                 .is_err()
             {
                 temp_guard
-
-                // TODO: Ensure this is all correct by implementing the parallel search.
-                // TODO: Figure out what tests we can do to ensure correctness.
             } else {
                 drop(temp_guard);
                 self.expand();
@@ -189,7 +187,7 @@ impl TTable {
         let n_buckets = container.buckets.len() * 2;
         let mut buckets = Vec::with_capacity(n_buckets);
         for _ in 0..n_buckets {
-            buckets.push(PriorityLock::new(Vec::new()));
+            buckets.push(RwLock::new(Vec::new()));
         }
         let new_container = TableContainer {
             buckets,
@@ -213,7 +211,7 @@ impl TTable {
 
 #[derive(Debug)]
 struct TableContainer {
-    buckets: Vec<PriorityLock<Vec<(u64, TTEntry)>>>,
+    buckets: Vec<RwLock<Vec<(u64, TTEntry)>>>,
     size: AtomicUsize,
 }
 
@@ -223,6 +221,9 @@ struct PriorityLock<T> {
     writers_waiting: AtomicUsize,
 }
 
+/// Reader-writer lock that gives writers priority. Readers can only
+/// acquire the lock if no writers currently hold the lock, and if no
+/// writers are currently waiting for the lock.
 impl<T> PriorityLock<T> {
     fn new(t: T) -> Self {
         Self {

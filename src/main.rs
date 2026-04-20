@@ -20,7 +20,8 @@ fn main() {
         .iterative_deepening(true)
         .use_t_table(true)
         .max_time(None)
-        .t_table_buckets(5000000 * 2 * 2 * 2);
+        .t_table_buckets(5000000 * 2 * 2 * 2)
+        .shared_t_table(true);
     let minimax = MinimaxBuilder::new()
         .max_depth(Some(7))
         .iterative_deepening(true)
@@ -39,7 +40,7 @@ fn main() {
     //let result = minimax.build().search_utility(&GameState::default());
     println!("{:?}", result);
     let end = std::time::Instant::now();
-    println!("{}", (end - start).as_secs_f32());
+    println!("Parallel: {} s", (end - start).as_secs_f32());
 
     let start = std::time::Instant::now();
     //minimax_v_minimax(
@@ -54,7 +55,7 @@ fn main() {
     //let result = minimax.build().search_utility(&GameState::default());
     println!("{:?}", result);
     let end = std::time::Instant::now();
-    println!("{}", (end - start).as_secs_f32());
+    println!("Sequential: {} s", (end - start).as_secs_f32());
 
     //mancalamax::ui::gui::make_gui();
     //println!("{:?}", GameState::default().valid_moves());

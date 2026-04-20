@@ -7,6 +7,7 @@ use super::zobrist::MancalaZobrist;
 use super::{MoveOrderFn, StateEvalFn};
 use crate::game::{Move, Player};
 use rustc_hash::FxHashMap;
+use std::sync::Mutex;
 use std::time::Duration;
 
 /// Helper for constructing [`Minimax`] instances based on certain specifications.
@@ -228,6 +229,7 @@ pub struct ParMinimaxBuilder<T: MancalaZobrist> {
     evaluator: StateEvalFn<T>,
     heuristic: StateEvalFn<T>,
     t_table_buckets: usize,
+    shared_t_table: bool,
 }
 
 impl<T: MancalaZobrist> Default for ParMinimaxBuilder<T> {
@@ -242,6 +244,7 @@ impl<T: MancalaZobrist> Default for ParMinimaxBuilder<T> {
     ///   the players (positive if the current player is winning).
     /// - `heuristic`: Same as evaluator.
     /// - `t_table_buckets`: `1`
+    /// - `shared_t_table`: [`true`]
     fn default() -> Self {
         // Faster than sorting s.valid_moves() at each iteration.
         let move_orderer = |s: &T| {
@@ -271,6 +274,7 @@ impl<T: MancalaZobrist> Default for ParMinimaxBuilder<T> {
             evaluator,
             heuristic,
             t_table_buckets: 1,
+            shared_t_table: true,
         }
     }
 }
@@ -384,10 +388,18 @@ impl<T: MancalaZobrist> ParMinimaxBuilder<T> {
         self
     }
 
+    /// Set whether to use a shared transposition table, or whether
+    /// to use per-thread tables.
+    pub fn shared_t_table(mut self, enabled: bool) -> Self {
+        self.shared_t_table = enabled;
+        self
+    }
+
     /// Construct a [`ParMinimax`] instance based on the set configuration.
     pub fn build(&self) -> ParMinimax<T> {
         // Initially size the transposition table.
-        let t_table_buckets = if self.use_t_table && self.t_table_buckets > 0 {
+        let t_table_buckets = if self.use_t_table && self.shared_t_table && self.t_table_buckets > 0
+        {
             self.t_table_buckets
         } else {
             1
@@ -405,6 +417,7 @@ impl<T: MancalaZobrist> ParMinimaxBuilder<T> {
             start_time: None.into(),
             t_table: TTable::new(t_table_buckets),
             z_data: Default::default(),
+            shared_t_table: self.shared_t_table,
         }
     }
 }
@@ -421,5 +434,6 @@ fn par_from_common<T: MancalaZobrist>(value: &ParMinimax<T>) -> ParMinimaxBuilde
         evaluator: value.evaluator,
         heuristic: value.heuristic,
         t_table_buckets: value.t_table.n_buckets(),
+        shared_t_table: value.shared_t_table,
     }
 }
