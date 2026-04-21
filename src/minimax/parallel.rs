@@ -6,7 +6,7 @@ use super::zobrist::{MancalaZobrist, ZobristData};
 use super::{InternalResult, MoveOrderFn, MultiSearchResult, SearchResult, StateEvalFn};
 use crate::game::{Move, Player};
 use rustc_hash::FxHashMap;
-use std::sync::RwLock;
+use std::sync::{RwLock, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 // TODO: Mention cases where it happens to be faster under these restricted circumstances.
 
 // TODO: Note that if shared table implementation were better, it might be possible
-//       to get some speedup.
+//       to get some speedup. BUT -- NOW IT SEEMS LIKE MY SYSTEM IS ABOUT AS GOOD AS DASHMAP!
 
 /// Stores the necessary information for executing a parallelized variant of the minimax
 /// algorithm on a Mancala board state in order to determine the most optimal move (i.e.,
@@ -391,7 +391,8 @@ impl<T: MancalaZobrist> ParMinimax<T> {
         let mut found_move: Option<Move> = None;
         let mut fully_searched = true;
 
-        let mut handles = Vec::new();
+        let (tx, rx) = mpsc::channel();
+        let mut spawned = 0usize;
 
         for (i, m) in self
             .order_moves_with_tt(state, assigned_table.as_deref())
@@ -402,30 +403,54 @@ impl<T: MancalaZobrist> ParMinimax<T> {
             let new_state = state
                 .make_move_zobrist(&self.z_data.read().unwrap(), m)
                 .unwrap();
-            let parent_turn = state.current_turn();
-            let run_search = move |alpha, beta, allocate, assigned| {
-                let mut table = match allocate {
-                    true => Some(FxHashMap::default()),
-                    false => None,
-                };
-                let t = if allocate { table.as_mut() } else { assigned };
-                if new_state.current_turn() == parent_turn {
-                    self.max_value(&new_state, alpha, beta, depth + 1, limit, scope, t)
-                } else {
-                    self.min_value(&new_state, alpha, beta, depth + 1, limit, scope, t)
-                }
-            };
 
             // Use Young Brothers Wait Concept (YBWC) to only run the search in parallel
             // after first narrowing the bounds (i.e., after running a search on the first
             // move returned by the move orderer). We only perform root move splitting.
             if depth == 0 && i > 0 {
-                handles.push((m, scope.spawn(move || run_search(alpha, beta, true, None))));
+                let parent_turn = state.current_turn();
+                let tx = tx.clone();
+                let run_search = move |alpha, beta| {
+                    let mut table = match self.shared_t_table {
+                        false if self.use_t_table => Some(FxHashMap::default()),
+                        _ => None,
+                    };
+                    let t = table.as_mut();
+                    let result = if new_state.current_turn() == parent_turn {
+                        self.max_value(&new_state, alpha, beta, depth + 1, limit, scope, t)
+                    } else {
+                        self.min_value(&new_state, alpha, beta, depth + 1, limit, scope, t)
+                    };
+                    let _ = tx.send((m, result));
+                };
+                scope.spawn(move || run_search(alpha, beta));
+                spawned += 1;
                 continue;
             }
 
             let (v2, local_terminal) = {
-                match run_search(alpha, beta, false, assigned_table.as_deref_mut()) {
+                let result = if new_state.current_turn() == state.current_turn() {
+                    self.max_value(
+                        &new_state,
+                        alpha,
+                        beta,
+                        depth + 1,
+                        limit,
+                        scope,
+                        assigned_table.as_deref_mut(),
+                    )
+                } else {
+                    self.min_value(
+                        &new_state,
+                        alpha,
+                        beta,
+                        depth + 1,
+                        limit,
+                        scope,
+                        assigned_table.as_deref_mut(),
+                    )
+                };
+                match result {
                     InternalResult::Node {
                         utility: v,
                         fully_searched: f,
@@ -449,11 +474,13 @@ impl<T: MancalaZobrist> ParMinimax<T> {
             }
         }
 
+        drop(tx);
+
         // Evaluate the results from the spawned threads. Note that we do not
-        // prune, since all threads must be joined anyway (i.e., the loop must
-        // run to completion).
-        for (m, h) in handles {
-            let (v2, local_terminal) = match h.join().unwrap() {
+        // prune, since alpha will never be greater than beta at the root.
+        for _ in 0..spawned {
+            let (m, result) = rx.recv().unwrap();
+            let (v2, local_terminal) = match result {
                 InternalResult::Node {
                     utility: v,
                     fully_searched: f,
@@ -471,7 +498,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
             fully_searched &= local_terminal;
         }
 
-        // Store results into the transition table, if necessary.
+        // Store results into the transposition table, if necessary.
         self.tt_store(
             state,
             v,
@@ -575,7 +602,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
             }
         }
 
-        // Store results into the transition table, if necessary.
+        // Store results into the transposition table, if necessary.
         self.tt_store(
             state,
             v,

@@ -346,7 +346,7 @@ impl<T: MancalaZobrist> Minimax<T> {
             }
         }
 
-        // Store results into the transition table, if necessary.
+        // Store results into the transposition table, if necessary.
         self.tt_store(
             state,
             v,
@@ -423,7 +423,7 @@ impl<T: MancalaZobrist> Minimax<T> {
             }
         }
 
-        // Store results into the transition table, if necessary.
+        // Store results into the transposition table, if necessary.
         self.tt_store(
             state,
             v,

@@ -242,7 +242,7 @@ impl<T: MancalaZobrist> Default for ParMinimaxBuilder<T> {
     /// - `evaluator`: A function that returns the point differential between
     ///   the players (positive if the current player is winning).
     /// - `heuristic`: Same as evaluator.
-    /// - `t_table_buckets`: `4096`
+    /// - `t_table_buckets`: `1024`
     /// - `shared_t_table`: [`true`]
     fn default() -> Self {
         // Faster than sorting s.valid_moves() at each iteration.
@@ -272,7 +272,7 @@ impl<T: MancalaZobrist> Default for ParMinimaxBuilder<T> {
             move_orderer,
             evaluator,
             heuristic,
-            t_table_buckets: 4096,
+            t_table_buckets: 1024,
             shared_t_table: true,
         }
     }
@@ -382,7 +382,7 @@ impl<T: MancalaZobrist> ParMinimaxBuilder<T> {
     }
 
     /// Set the initial number of shared transposition table buckets.
-    /// Must be a positive power of two (e.g., `4096`).
+    /// Must be a positive power of two (e.g., `1024`).
     pub fn t_table_buckets(mut self, n: usize) -> Self {
         assert!(n > 0, "t_table_buckets must be greater than 0");
         assert!(
