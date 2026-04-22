@@ -293,7 +293,8 @@ impl<T: MancalaZobrist> ParMinimax<T> {
         }
 
         let mut move_util_term: Vec<(Move, f32, bool)> = Vec::new();
-        let mut handles = Vec::new();
+        let (tx, rx) = mpsc::channel();
+        let mut spawned = 0usize;
 
         for m in self.order_moves_with_tt(state, None) {
             let new_state = state
@@ -301,13 +302,16 @@ impl<T: MancalaZobrist> ParMinimax<T> {
                 .unwrap();
 
             let parent_turn = state.current_turn();
+            let tx = tx.clone();
             let run_search = move || {
+                // Create thread-local transposition tables if necessary.
+                // Otherwise, tell threads to use the shared table.
                 let mut table = match self.shared_t_table {
                     false => Some(FxHashMap::default()),
                     true => None,
                 };
                 let t = table.as_mut();
-                if new_state.current_turn() == parent_turn {
+                let result = if new_state.current_turn() == parent_turn {
                     self.max_value(
                         &new_state,
                         f32::NEG_INFINITY,
@@ -327,14 +331,21 @@ impl<T: MancalaZobrist> ParMinimax<T> {
                         scope,
                         t,
                     )
-                }
+                };
+                let _ = tx.send((m, result));
             };
 
-            handles.push((m, scope.spawn(run_search)));
+            scope.spawn(run_search);
+            spawned += 1;
         }
 
-        for (m, h) in handles {
-            let (utility, terminal) = match h.join().unwrap() {
+        // Allow rx loop to terminate.
+        drop(tx);
+
+        // Collect results from each spawned thread.
+        for _ in 0..spawned {
+            let (m, result) = rx.recv().unwrap();
+            let (utility, terminal) = match result {
                 InternalResult::Node {
                     utility: v,
                     fully_searched: f,
@@ -411,6 +422,8 @@ impl<T: MancalaZobrist> ParMinimax<T> {
                 let parent_turn = state.current_turn();
                 let tx = tx.clone();
                 let run_search = move |alpha, beta| {
+                    // Create thread-local transposition tables if necessary.
+                    // Otherwise, tell threads to use the shared table.
                     let mut table = match self.shared_t_table {
                         false if self.use_t_table => Some(FxHashMap::default()),
                         _ => None,
@@ -423,11 +436,13 @@ impl<T: MancalaZobrist> ParMinimax<T> {
                     };
                     let _ = tx.send((m, result));
                 };
+
                 scope.spawn(move || run_search(alpha, beta));
                 spawned += 1;
                 continue;
             }
 
+            // Run a sequential search.
             let (v2, local_terminal) = {
                 let result = if new_state.current_turn() == state.current_turn() {
                     self.max_value(
@@ -474,10 +489,11 @@ impl<T: MancalaZobrist> ParMinimax<T> {
             }
         }
 
+        // Allow rx loop to terminate.
         drop(tx);
 
         // Evaluate the results from the spawned threads. Note that we do not
-        // prune, since alpha will never be greater than beta at the root.
+        // prune, since alpha will never exceed beta at the root.
         for _ in 0..spawned {
             let (m, result) = rx.recv().unwrap();
             let (v2, local_terminal) = match result {
