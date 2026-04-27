@@ -39,7 +39,7 @@ fn main() {
     // TODO: Probably need a Minimax trait...
 
     const RUN: bool = false;
-    const FILE: &str = "results_longer.json";
+    const FILE: &str = "results_longer2.json";
 
     if RUN {
         let seq1 = MinimaxBuilder::new()

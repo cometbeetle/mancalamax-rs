@@ -344,7 +344,10 @@ impl<T: MancalaZobrist> ParMinimax<T> {
                 self.active_threads.fetch_sub(1, Ordering::Relaxed);
                 run_search(&z_data);
             } else {
-                scope.spawn(move || run_search(&z_data));
+                scope.spawn(move || {
+                    run_search(&z_data);
+                    self.active_threads.fetch_sub(1, Ordering::Relaxed);
+                });
             }
             spawned += 1;
         }
@@ -355,7 +358,6 @@ impl<T: MancalaZobrist> ParMinimax<T> {
         // Collect results from each spawned thread.
         for _ in 0..spawned {
             let (m, result) = rx.recv().unwrap();
-            self.active_threads.fetch_sub(1, Ordering::Relaxed);
             let (utility, terminal) = match result {
                 InternalResult::Node {
                     utility: v,
@@ -451,7 +453,10 @@ impl<T: MancalaZobrist> ParMinimax<T> {
                     self.active_threads.fetch_sub(1, Ordering::Relaxed);
                 } else {
                     let z_data = z_data.clone();
-                    scope.spawn(move || run_search(alpha, beta, new_state, &z_data));
+                    scope.spawn(move || {
+                        run_search(alpha, beta, new_state, &z_data);
+                        self.active_threads.fetch_sub(1, Ordering::Relaxed);
+                    });
                     spawned += 1;
                     continue;
                 }
@@ -513,7 +518,6 @@ impl<T: MancalaZobrist> ParMinimax<T> {
         // prune, since alpha will never exceed beta at the root.
         for _ in 0..spawned {
             let (m, result) = rx.recv().unwrap();
-            self.active_threads.fetch_sub(1, Ordering::Relaxed);
             let (v2, local_terminal) = match result {
                 InternalResult::Node {
                     utility: v,
