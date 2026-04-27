@@ -6,18 +6,10 @@ use super::zobrist::{MancalaZobrist, ZobristData};
 use super::{InternalResult, MoveOrderFn, MultiSearchResult, SearchResult, StateEvalFn};
 use crate::game::{Move, Player};
 use rustc_hash::FxHashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{RwLock, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
-
-// TODO: Interestingly, only better with iterative deepening with these settings.
-
-// TODO: Clean up, and just compare separate TTs vs. shared TT vs. fully sequential.
-// TODO: Then do VTune analysis of cache, how long waiting for stuff, etc. Make detailed.
-// TODO: Mention cases where it happens to be faster under these restricted circumstances.
-
-// TODO: Note that if shared table implementation were better, it might be possible
-//       to get some speedup. BUT -- NOW IT SEEMS LIKE MY SYSTEM IS ABOUT AS GOOD AS DASHMAP!
 
 /// Stores the necessary information for executing a parallelized variant of the minimax
 /// algorithm on a Mancala board state in order to determine the most optimal move (i.e.,
@@ -36,6 +28,8 @@ pub struct ParMinimax<T: MancalaZobrist> {
     pub(super) t_table: TTable,
     pub(super) z_data: RwLock<ZobristData>,
     pub(super) shared_t_table: bool,
+    pub(super) max_threads: usize,
+    pub(super) active_threads: AtomicUsize,
 }
 
 impl<T: MancalaZobrist> From<ParMinimaxBuilder<T>> for ParMinimax<T> {
@@ -108,6 +102,12 @@ impl<T: MancalaZobrist> ParMinimax<T> {
         self.shared_t_table
     }
 
+    /// Returns the maximum number of threads used during search.
+    #[inline]
+    pub fn max_threads(&self) -> usize {
+        self.max_threads
+    }
+
     /// Calls the move ordering function on a given state.
     #[inline]
     pub fn order_moves(&self, state: &T) -> Vec<Move> {
@@ -132,6 +132,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
     /// If no move was found successfully, returns [`None`].
     pub fn search_utility(&self, state: &T) -> Option<SearchResult> {
         *self.start_time.write().unwrap() = Some(Instant::now());
+        self.active_threads.store(1, Ordering::Relaxed);
         let mut found_move: Option<Move> = None;
         let mut utility = f32::NEG_INFINITY;
         let mut depth_searched: Option<usize> = self.max_depth;
@@ -160,6 +161,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
                         Some(limit),
                         s,
                         None,
+                        &self.z_data.read().unwrap(),
                     ) {
                         InternalResult::Node {
                             found_move: m,
@@ -182,6 +184,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
                     self.max_depth,
                     s,
                     None,
+                    &self.z_data.read().unwrap(),
                 ) {
                     InternalResult::Node {
                         found_move: m,
@@ -217,6 +220,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
     /// If no moves could be successfully evaluated, returns [`None`].
     pub fn search_utility_all(&self, state: &T) -> Option<MultiSearchResult> {
         *self.start_time.write().unwrap() = Some(Instant::now());
+        self.active_threads.store(1, Ordering::Relaxed);
         let mut result: Option<MultiSearchResult> = None;
 
         // Ensure the current Zobrist values are valid.
@@ -297,13 +301,12 @@ impl<T: MancalaZobrist> ParMinimax<T> {
         let mut spawned = 0usize;
 
         for m in self.order_moves_with_tt(state, None) {
-            let new_state = state
-                .make_move_zobrist(&self.z_data.read().unwrap(), m)
-                .unwrap();
-
+            let z_data = self.z_data.read().unwrap().clone();
+            let new_state = state.make_move_zobrist(&z_data, m).unwrap();
             let parent_turn = state.current_turn();
             let tx = tx.clone();
-            let run_search = move || {
+
+            let run_search = move |z: &ZobristData| {
                 // Create thread-local transposition tables if necessary.
                 // Otherwise, tell threads to use the shared table.
                 let mut table = match self.shared_t_table {
@@ -320,6 +323,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
                         limit,
                         scope,
                         t,
+                        z,
                     )
                 } else {
                     self.min_value(
@@ -330,12 +334,18 @@ impl<T: MancalaZobrist> ParMinimax<T> {
                         limit,
                         scope,
                         t,
+                        z,
                     )
                 };
                 let _ = tx.send((m, result));
             };
 
-            scope.spawn(run_search);
+            if self.active_threads.fetch_add(1, Ordering::Relaxed) >= self.max_threads {
+                self.active_threads.fetch_sub(1, Ordering::Relaxed);
+                run_search(&z_data);
+            } else {
+                scope.spawn(move || run_search(&z_data));
+            }
             spawned += 1;
         }
 
@@ -345,6 +355,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
         // Collect results from each spawned thread.
         for _ in 0..spawned {
             let (m, result) = rx.recv().unwrap();
+            self.active_threads.fetch_sub(1, Ordering::Relaxed);
             let (utility, terminal) = match result {
                 InternalResult::Node {
                     utility: v,
@@ -375,6 +386,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
         limit: Option<usize>,
         scope: &'scope thread::Scope<'scope, 'env>,
         mut assigned_table: Option<&mut FxHashMap<u64, TTEntry>>,
+        z_data: &ZobristData,
     ) -> InternalResult
     where
         T: 'env,
@@ -411,9 +423,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
             .copied()
             .enumerate()
         {
-            let new_state = state
-                .make_move_zobrist(&self.z_data.read().unwrap(), m)
-                .unwrap();
+            let new_state = state.make_move_zobrist(&z_data, m).unwrap();
 
             // Use Young Brothers Wait Concept (YBWC) to only run the search in parallel
             // after first narrowing the bounds (i.e., after running a search on the first
@@ -421,7 +431,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
             if depth == 0 && i > 0 {
                 let parent_turn = state.current_turn();
                 let tx = tx.clone();
-                let run_search = move |alpha, beta| {
+                let run_search = move |alpha, beta, new_state: T, z: &ZobristData| {
                     // Create thread-local transposition tables if necessary.
                     // Otherwise, tell threads to use the shared table.
                     let mut table = match self.shared_t_table {
@@ -430,16 +440,21 @@ impl<T: MancalaZobrist> ParMinimax<T> {
                     };
                     let t = table.as_mut();
                     let result = if new_state.current_turn() == parent_turn {
-                        self.max_value(&new_state, alpha, beta, depth + 1, limit, scope, t)
+                        self.max_value(&new_state, alpha, beta, depth + 1, limit, scope, t, z)
                     } else {
-                        self.min_value(&new_state, alpha, beta, depth + 1, limit, scope, t)
+                        self.min_value(&new_state, alpha, beta, depth + 1, limit, scope, t, z)
                     };
                     let _ = tx.send((m, result));
                 };
 
-                scope.spawn(move || run_search(alpha, beta));
-                spawned += 1;
-                continue;
+                if self.active_threads.fetch_add(1, Ordering::Relaxed) >= self.max_threads {
+                    self.active_threads.fetch_sub(1, Ordering::Relaxed);
+                } else {
+                    let z_data = z_data.clone();
+                    scope.spawn(move || run_search(alpha, beta, new_state, &z_data));
+                    spawned += 1;
+                    continue;
+                }
             }
 
             // Run a sequential search.
@@ -453,6 +468,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
                         limit,
                         scope,
                         assigned_table.as_deref_mut(),
+                        z_data,
                     )
                 } else {
                     self.min_value(
@@ -463,6 +479,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
                         limit,
                         scope,
                         assigned_table.as_deref_mut(),
+                        z_data,
                     )
                 };
                 match result {
@@ -496,6 +513,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
         // prune, since alpha will never exceed beta at the root.
         for _ in 0..spawned {
             let (m, result) = rx.recv().unwrap();
+            self.active_threads.fetch_sub(1, Ordering::Relaxed);
             let (v2, local_terminal) = match result {
                 InternalResult::Node {
                     utility: v,
@@ -544,6 +562,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
         limit: Option<usize>,
         scope: &'scope thread::Scope<'scope, 'env>,
         mut assigned_table: Option<&mut FxHashMap<u64, TTEntry>>,
+        z_data: &ZobristData,
     ) -> InternalResult {
         debug_assert!(
             self.start_time.read().unwrap().is_some(),
@@ -568,9 +587,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
         let mut fully_searched = true;
 
         for m in self.order_moves_with_tt(state, assigned_table.as_deref()) {
-            let new_state = state
-                .make_move_zobrist(&self.z_data.read().unwrap(), m)
-                .unwrap();
+            let new_state = state.make_move_zobrist(&z_data, m).unwrap();
 
             let (v2, local_terminal) = {
                 let result = if new_state.current_turn() == state.current_turn() {
@@ -582,6 +599,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
                         limit,
                         scope,
                         assigned_table.as_deref_mut(),
+                        z_data,
                     )
                 } else {
                     self.max_value(
@@ -592,6 +610,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
                         limit,
                         scope,
                         assigned_table.as_deref_mut(),
+                        z_data,
                     )
                 };
                 match result {
