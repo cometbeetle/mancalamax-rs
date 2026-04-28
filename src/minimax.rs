@@ -8,22 +8,22 @@ mod table;
 pub mod zobrist;
 
 pub use algorithm::Minimax;
-pub use builder::{MinimaxBuilder, ParMinimaxBuilder};
+pub use builder::{MinimaxBuilder, ParMinimaxBuilder, default_evaluator, default_move_orderer};
 pub use parallel::ParMinimax;
 pub use zobrist::{MancalaZobrist, ZobristAction, ZobristData};
 
 use crate::game::{Move, Player};
 
 /// Type alias for any function that evaluates a reference to a type
-/// (usually some kind of Mancala game state) and a current player,
-/// and produces a [`f32`] value indicating some level of utility.
-/// Positive values indicate higher utility.
+/// that implements the [`Mancala`][`crate::game::Mancala`] trait and
+/// a current player, and produces a [`f32`] value indicating some level
+/// of utility. Positive values indicate higher utility.
 pub type StateEvalFn<T> = fn(&T, player: Player) -> f32;
 
 /// Type alias for any function that evaluates a reference to a type
-/// (usually some kind of Mancala game state) and produces a vector
-/// of moves in a specific order. Every move in the vector should
-/// be a valid move, given the supplied game state reference.
+/// that implements the [`Mancala`][`crate::game::Mancala`] trait and
+/// produces a vector of moves in a specific order. Every move in the
+/// vector should be a valid move, given the supplied game state reference.
 pub type MoveOrderFn<T> = fn(&T) -> Vec<Move>;
 
 /// Stores the value of a minimax search result.

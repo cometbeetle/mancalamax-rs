@@ -95,7 +95,7 @@ pub(super) enum ValueBound {
 /// Implementation of a fixed-size, concurrent, sharded transposition table
 /// with per-bucket locks.
 #[derive(Debug)]
-pub(crate) struct TTable {
+pub(super) struct TTable {
     buckets: Vec<PriorityLock<FxHashMap<u64, TTEntry>>>,
     size: AtomicUsize,
 }
@@ -132,13 +132,6 @@ impl TTable {
         bucket.get(&hash).copied()
     }
 
-    pub(super) fn remove(&mut self, hash: u64) -> Option<TTEntry> {
-        let idx = self.bucket_idx(hash);
-        let mut bucket = self.buckets[idx].write().unwrap();
-        self.size.fetch_sub(1, Ordering::Relaxed);
-        bucket.remove(&hash)
-    }
-
     #[inline]
     pub(super) fn n_buckets(&self) -> usize {
         self.buckets.len()
@@ -150,18 +143,18 @@ impl TTable {
     }
 }
 
-#[derive(Debug)]
-struct PriorityLock<T> {
-    lock: RwLock<T>,
-    writers_waiting: AtomicUsize,
-}
-
 /// Reader-writer lock that gives writers priority. Readers can only
 /// acquire the lock if no writers currently hold the lock, and if no
 /// writers are currently waiting for the lock.
 ///
 /// This helps prevent cases where writers are starved, which would prevent
 /// updates to the transposition table from succeeding in a timely manner.
+#[derive(Debug)]
+struct PriorityLock<T> {
+    lock: RwLock<T>,
+    writers_waiting: AtomicUsize,
+}
+
 impl<T> PriorityLock<T> {
     fn new(t: T) -> Self {
         Self {

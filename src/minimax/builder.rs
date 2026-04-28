@@ -1,11 +1,11 @@
-//! Builder utilities for constructing [`Minimax`] instances.
+//! Builder utilities for constructing [`Minimax`] and [`ParMinimax`] instances.
 
 use super::algorithm::Minimax;
 use super::parallel::ParMinimax;
 use super::table::TTable;
 use super::zobrist::MancalaZobrist;
 use super::{MoveOrderFn, StateEvalFn};
-use crate::game::{Move, Player};
+use crate::game::{Mancala, Move, Player};
 use rustc_hash::FxHashMap;
 use std::time::Duration;
 
@@ -36,33 +36,15 @@ impl<T: MancalaZobrist> Default for MinimaxBuilder<T> {
     /// - `heuristic`: Same as evaluator.
     /// - `t_table_capacity`: `0`
     fn default() -> Self {
-        // Faster than sorting s.valid_moves() at each iteration.
-        let move_orderer = |s: &T| {
-            let mut moves = Vec::new();
-            if s.swap_allowed() {
-                moves.insert(0, Move::Swap);
-            }
-            for (i, pit) in s.board()[s.current_turn()].as_ref().iter().enumerate() {
-                if *pit > 0 {
-                    moves.insert(0, Move::Pit(i + 1));
-                }
-            }
-            moves
-        };
-        let evaluator = |s: &T, p: Player| match p {
-            Player::One => (s.score(Player::One) as isize - s.score(Player::Two) as isize) as f32,
-            Player::Two => (s.score(Player::Two) as isize - s.score(Player::One) as isize) as f32,
-        };
-        let heuristic = evaluator;
         Self {
             optimize_for: Player::One,
             max_depth: Some(18),
             max_time: None,
             iterative_deepening: true,
             use_t_table: true,
-            move_orderer,
-            evaluator,
-            heuristic,
+            move_orderer: default_move_orderer,
+            evaluator: default_evaluator,
+            heuristic: default_evaluator,
             t_table_capacity: 0,
         }
     }
@@ -201,21 +183,6 @@ impl<T: MancalaZobrist> MinimaxBuilder<T> {
     }
 }
 
-/// Helper function for implementing the [`From`] trait.
-fn from_common<T: MancalaZobrist>(value: &Minimax<T>) -> MinimaxBuilder<T> {
-    MinimaxBuilder {
-        optimize_for: value.optimize_for,
-        max_depth: value.max_depth,
-        max_time: value.max_time,
-        iterative_deepening: value.iterative_deepening,
-        use_t_table: value.use_t_table,
-        move_orderer: value.move_orderer,
-        evaluator: value.evaluator,
-        heuristic: value.heuristic,
-        t_table_capacity: value.t_table.borrow().capacity(),
-    }
-}
-
 /// Helper for constructing [`ParMinimax`] instances based on certain specifications.
 #[derive(Debug, Clone, Copy)]
 pub struct ParMinimaxBuilder<T: MancalaZobrist> {
@@ -247,33 +214,15 @@ impl<T: MancalaZobrist> Default for ParMinimaxBuilder<T> {
     /// - `shared_t_table`: [`true`]
     /// - `max_threads`: `1`
     fn default() -> Self {
-        // Faster than sorting s.valid_moves() at each iteration.
-        let move_orderer = |s: &T| {
-            let mut moves = Vec::new();
-            if s.swap_allowed() {
-                moves.insert(0, Move::Swap);
-            }
-            for (i, pit) in s.board()[s.current_turn()].as_ref().iter().enumerate() {
-                if *pit > 0 {
-                    moves.insert(0, Move::Pit(i + 1));
-                }
-            }
-            moves
-        };
-        let evaluator = |s: &T, p: Player| match p {
-            Player::One => (s.score(Player::One) as isize - s.score(Player::Two) as isize) as f32,
-            Player::Two => (s.score(Player::Two) as isize - s.score(Player::One) as isize) as f32,
-        };
-        let heuristic = evaluator;
         Self {
             optimize_for: Player::One,
             max_depth: Some(18),
             max_time: None,
             iterative_deepening: true,
             use_t_table: true,
-            move_orderer,
-            evaluator,
-            heuristic,
+            move_orderer: default_move_orderer,
+            evaluator: default_evaluator,
+            heuristic: default_evaluator,
             t_table_buckets: 4096,
             shared_t_table: true,
             max_threads: 1,
@@ -436,6 +385,52 @@ impl<T: MancalaZobrist> ParMinimaxBuilder<T> {
             max_threads: self.max_threads,
             active_threads: 1usize.into(),
         }
+    }
+}
+
+/// A function that returns the valid moves for a supplied game state in
+/// descending order by pit number.
+///
+/// Serves as the default move orderer for [`Minimax`] and [`ParMinimax`]
+/// objects.
+pub fn default_move_orderer<T: Mancala>(s: &T) -> Vec<Move> {
+    // Faster than sorting s.valid_moves() at each iteration.
+    let mut moves = Vec::new();
+    if s.swap_allowed() {
+        moves.insert(0, Move::Swap);
+    }
+    for (i, pit) in s.board()[s.current_turn()].as_ref().iter().enumerate() {
+        if *pit > 0 {
+            moves.insert(0, Move::Pit(i + 1));
+        }
+    }
+    moves
+}
+
+/// A function that returns the point differential between the players
+/// for a supplied game state (positive if the current player is winning).
+///
+/// Serves as the default state evaluator and heuristic for [`Minimax`] and
+/// [`ParMinimax`] objects.
+pub fn default_evaluator<T: Mancala>(s: &T, p: Player) -> f32 {
+    match p {
+        Player::One => (s.score(Player::One) as isize - s.score(Player::Two) as isize) as f32,
+        Player::Two => (s.score(Player::Two) as isize - s.score(Player::One) as isize) as f32,
+    }
+}
+
+/// Helper function for implementing the [`From`] trait.
+fn from_common<T: MancalaZobrist>(value: &Minimax<T>) -> MinimaxBuilder<T> {
+    MinimaxBuilder {
+        optimize_for: value.optimize_for,
+        max_depth: value.max_depth,
+        max_time: value.max_time,
+        iterative_deepening: value.iterative_deepening,
+        use_t_table: value.use_t_table,
+        move_orderer: value.move_orderer,
+        evaluator: value.evaluator,
+        heuristic: value.heuristic,
+        t_table_capacity: value.t_table.borrow().capacity(),
     }
 }
 

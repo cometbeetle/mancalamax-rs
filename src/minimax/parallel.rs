@@ -1,4 +1,5 @@
-//! Implementation of the minimax algorithm with alpha-beta pruning for Mancala.
+//! Implementation of a parallelized version of the minimax algorithm with
+//! alpha-beta pruning for Mancala.
 
 use super::builder::ParMinimaxBuilder;
 use super::table::{TTEntry, TTable};
