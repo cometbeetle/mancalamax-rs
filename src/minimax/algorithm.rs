@@ -25,6 +25,7 @@ pub struct Minimax<T: MancalaZobrist> {
     pub(super) start_time: Cell<Option<Instant>>,
     pub(super) t_table: RefCell<FxHashMap<u64, TTEntry>>,
     pub(super) z_data: RefCell<ZobristData>,
+    pub(super) nodes_visited: Cell<usize>,
 }
 
 impl<T: MancalaZobrist> From<MinimaxBuilder<T>> for Minimax<T> {
@@ -84,6 +85,12 @@ impl<T: MancalaZobrist> Minimax<T> {
         &self.z_data
     }
 
+    /// Returns the number of nodes visited during the most recent search.
+    #[inline]
+    pub fn nodes_visited(&self) -> usize {
+        self.nodes_visited.get()
+    }
+
     /// Calls the move ordering function on a given state.
     #[inline]
     pub fn order_moves(&self, state: &T) -> Vec<Move> {
@@ -108,6 +115,7 @@ impl<T: MancalaZobrist> Minimax<T> {
     /// If no move was found successfully, returns [`None`].
     pub fn search_utility(&self, state: &T) -> Option<SearchResult> {
         self.start_time.set(Some(Instant::now()));
+        self.nodes_visited.replace(0);
         let mut found_move: Option<Move> = None;
         let mut utility = f32::NEG_INFINITY;
         let mut depth_searched: Option<usize> = self.max_depth;
@@ -175,6 +183,7 @@ impl<T: MancalaZobrist> Minimax<T> {
     /// If no moves could be successfully evaluated, returns [`None`].
     pub fn search_utility_all(&self, state: &T) -> Option<MultiSearchResult> {
         self.start_time.set(Some(Instant::now()));
+        self.nodes_visited.replace(0);
         let mut result: Option<MultiSearchResult> = None;
 
         // Ensure the current Zobrist values are valid.
@@ -456,6 +465,9 @@ impl<T: MancalaZobrist> Minimax<T> {
         depth: usize,
         limit: Option<usize>,
     ) -> (Option<InternalResult>, f32, f32, usize) {
+        // Record that we visited a node.
+        self.nodes_visited.update(|n| n + 1);
+
         // Keep track of the original values for alpha, beta, and the remaining depth.
         let alpha_orig = *alpha;
         let beta_orig = *beta;

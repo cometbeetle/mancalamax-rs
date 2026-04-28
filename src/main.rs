@@ -1,7 +1,7 @@
 //use burn::data::dataset::Dataset;
 use mancalamax::game::{DynGameState, GameState};
 use mancalamax::game::{Mancala, Move, Player};
-use mancalamax::minimax::{MinimaxBuilder, ParMinimaxBuilder};
+use mancalamax::minimax::{MancalaZobrist, MinimaxBuilder, ParMinimaxBuilder};
 //use mancalamax::ml::MancalaDataset;
 use mancalamax::ui::{
     ExternalInterface, minimax_v_external, minimax_v_minimax, player_v_external, player_v_minimax,
@@ -41,6 +41,8 @@ fn main() {
     //       yet so sequential that with a small effective branching factor, it is nearly
     //       impossible to get speedup. Mainly a/b is what kills parallelism.
     //       This explains why max_value_all shows much more speedup. a/b is disabled.
+    //       Otherwise, narrowing bounds kill off subtrees much faster, even though
+    //       all root moves are "checked".
 
     // TODO: Clean up, and just compare separate TTs vs. shared TT vs. fully sequential.
     // TODO: Then do VTune analysis of cache, how long waiting for stuff, etc. Make detailed.
@@ -52,8 +54,8 @@ fn main() {
     // TODO: Make terminal functions able to take ParMinimaxBuilder objects.
     // TODO: Probably need a Minimax trait...
 
-    const RUN: bool = true;
-    const FILE: &str = "results_longer4.json";
+    const RUN: bool = false;
+    const FILES: [&str; 2] = ["times.json", "counts.json"];
 
     if RUN {
         let seq1 = MinimaxBuilder::new()
@@ -87,132 +89,93 @@ fn main() {
         let state1 = GameState::default();
         let state2 = GameState::<36>::new(12, 0, 0, Player::One, 1, false);
 
-        let mut results = HashMap::new();
+        let mut times = HashMap::new();
+        let mut visits = HashMap::new();
 
-        // Sequential version on default state (single move search).
-        let m = seq1.build();
-        println!("Started seq1 on state1...");
-        let start = std::time::Instant::now();
-        _ = m.search_utility(&state1);
-        let end = std::time::Instant::now();
-        results.insert(format!("seq1_{}", 1), end - start);
+        // Default state (single move search).
+        run_experiment(&state1, &seq1, &par1, false, 6, &mut times, &mut visits, 1);
 
-        // Parallel version on default state at varying thread counts (single move search).
-        for t in 1..=6 {
-            let m = par1.max_threads(t).build();
-            println!("Started par1 on state1 (t={})...", t);
-            let start = std::time::Instant::now();
-            _ = m.search_utility(&state1);
-            let end = std::time::Instant::now();
-            results.insert(format!("par1_{}", t), end - start);
-        }
+        // Default state (all move search).
+        run_experiment(&state1, &seq1, &par1, true, 6, &mut times, &mut visits, 1);
 
-        // Sequential version on default state (all move search).
-        let m = seq1.build();
-        println!("Started seq1_all on state1...");
-        let start = std::time::Instant::now();
-        _ = m.search_utility_all(&state1);
-        let end = std::time::Instant::now();
-        results.insert(format!("seq1_all_{}", 1), end - start);
+        // Expanded state (single move search).
+        run_experiment(&state2, &seq2, &par2, false, 36, &mut times, &mut visits, 2);
 
-        // Parallel version on default state at varying thread counts (all move search).
-        for t in 1..=6 {
-            let m = par1.max_threads(t).build();
-            println!("Started par1_all on state1 (t={})...", t);
-            let start = std::time::Instant::now();
-            _ = m.search_utility_all(&state1);
-            let end = std::time::Instant::now();
-            results.insert(format!("par1_all_{}", t), end - start);
-        }
+        // Expanded state (all move search).
+        run_experiment(&state2, &seq2, &par2, true, 36, &mut times, &mut visits, 2);
 
-        // Sequential version on expanded state (single move search).
-        let m = seq2.build();
-        println!("Started seq2 on state2...");
-        let start = std::time::Instant::now();
-        _ = m.search_utility(&state2);
-        let end = std::time::Instant::now();
-        results.insert(format!("seq2_{}", 1), end - start);
-
-        // Parallel version on expanded state at varying thread counts (single move search).
-        for t in 1..=36 {
-            let m = par2.max_threads(t).build();
-            println!("Started par2 on state2 (t={})...", t);
-            let start = std::time::Instant::now();
-            _ = m.search_utility(&state2);
-            let end = std::time::Instant::now();
-            results.insert(format!("par2_{}", t), end - start);
-        }
-
-        // Sequential version on expanded state (all move search).
-        let m = seq2.build();
-        println!("Started seq2_all on state2...");
-        let start = std::time::Instant::now();
-        _ = m.search_utility_all(&state2);
-        let end = std::time::Instant::now();
-        results.insert(format!("seq2_all_{}", 1), end - start);
-
-        // Parallel version on expanded state at varying thread counts (all move search).
-        for t in 1..=36 {
-            let m = par2.max_threads(t).build();
-            println!("Started par2_all on state2 (t={})...", t);
-            let start = std::time::Instant::now();
-            _ = m.search_utility_all(&state2);
-            let end = std::time::Instant::now();
-            results.insert(format!("par2_all_{}", t), end - start);
-        }
-
-        // Sequential version on default state, with ID + shared TT (single move search).
-        let m = seq3.build();
-        println!("Started seq3 on state1...");
-        let start = std::time::Instant::now();
-        _ = m.search_utility(&state1);
-        let end = std::time::Instant::now();
-        results.insert(format!("seq3_{}", 1), end - start);
-
-        // Parallel version on default state, with ID + shared TT, at varying thread counts (single move search).
-        for t in 1..=6 {
-            let m = par3.max_threads(t).build();
-            println!("Started par3 on state1 (t={})...", t);
-            let start = std::time::Instant::now();
-            _ = m.search_utility(&state1);
-            let end = std::time::Instant::now();
-            results.insert(format!("par3_{}", t), end - start);
-        }
+        // Default state, with ID + shared TT (single move search).
+        run_experiment(&state1, &seq3, &par3, false, 6, &mut times, &mut visits, 3);
 
         // Save results using Serde.
-        let file = std::fs::File::create(FILE).unwrap();
+        let file = std::fs::File::create(FILES[0]).unwrap();
         let w = std::io::BufWriter::new(file);
-        serde_json::ser::to_writer(w, &results).unwrap();
+        serde_json::ser::to_writer(w, &times).unwrap();
+        let file = std::fs::File::create(FILES[1]).unwrap();
+        let w = std::io::BufWriter::new(file);
+        serde_json::ser::to_writer(w, &visits).unwrap();
     }
 
-    let contents = std::fs::read_to_string(FILE).unwrap();
-    let results: HashMap<String, std::time::Duration> =
+    let contents = std::fs::read_to_string(FILES[0]).unwrap();
+    let times: HashMap<String, std::time::Duration> =
+        serde_json::from_str(&contents).unwrap();
+    let contents = std::fs::read_to_string(FILES[1]).unwrap();
+    let visits: HashMap<String, usize> =
         serde_json::from_str(&contents).unwrap();
 
     // Print results for CSV.
     println!("n_threads,seq1,seq1_all,seq2,seq2_all,seq3,par1,par1_all,par2,par2_all,par3");
-    print!("1,{},", results.get("seq1_1").unwrap().as_secs_f32());
-    print!("{},", results.get("seq1_all_1").unwrap().as_secs_f32());
-    print!("{},", results.get("seq2_1").unwrap().as_secs_f32());
-    print!("{},", results.get("seq2_all_1").unwrap().as_secs_f32());
-    print!("{},", results.get("seq3_1").unwrap().as_secs_f32());
-    print!("{},", results.get("par1_1").unwrap().as_secs_f32());
-    print!("{},", results.get("par1_all_1").unwrap().as_secs_f32());
-    print!("{},", results.get("par2_1").unwrap().as_secs_f32());
-    print!("{},", results.get("par2_all_1").unwrap().as_secs_f32());
-    println!("{}", results.get("par3_1").unwrap().as_secs_f32());
+    print!("1,{},", times.get("seq1").unwrap().as_secs_f32());
+    print!("{},", times.get("seq1_all").unwrap().as_secs_f32());
+    print!("{},", times.get("seq2").unwrap().as_secs_f32());
+    print!("{},", times.get("seq2_all").unwrap().as_secs_f32());
+    print!("{},", times.get("seq3").unwrap().as_secs_f32());
+    print!("{},", times.get("par1_1").unwrap().as_secs_f32());
+    print!("{},", times.get("par1_all_1").unwrap().as_secs_f32());
+    print!("{},", times.get("par2_1").unwrap().as_secs_f32());
+    print!("{},", times.get("par2_all_1").unwrap().as_secs_f32());
+    println!("{}", times.get("par3_1").unwrap().as_secs_f32());
     for t in 2..=36 {
         if t <= 6 {
-            print!("{},,,,,,{},", t, results.get(&format!("par1_{}", t)).unwrap().as_secs_f32());
-            print!("{},", results.get(&format!("par1_all_{}", t)).unwrap().as_secs_f32());
-            print!("{},", results.get(&format!("par2_{}", t)).unwrap().as_secs_f32());
-            print!("{},", results.get(&format!("par2_all_{}", t)).unwrap().as_secs_f32());
-            println!("{}", results.get(&format!("par3_{}", t)).unwrap().as_secs_f32());
+            print!("{},,,,,,{},", t, times.get(&format!("par1_{}", t)).unwrap().as_secs_f32());
+            print!("{},", times.get(&format!("par1_all_{}", t)).unwrap().as_secs_f32());
+            print!("{},", times.get(&format!("par2_{}", t)).unwrap().as_secs_f32());
+            print!("{},", times.get(&format!("par2_all_{}", t)).unwrap().as_secs_f32());
+            println!("{}", times.get(&format!("par3_{}", t)).unwrap().as_secs_f32());
         } else {
-            print!("{},,,,,,,,{},", t, results.get(&format!("par2_{}", t)).unwrap().as_secs_f32());
-            println!("{},", results.get(&format!("par2_all_{}", t)).unwrap().as_secs_f32());
+            print!("{},,,,,,,,{},", t, times.get(&format!("par2_{}", t)).unwrap().as_secs_f32());
+            println!("{},", times.get(&format!("par2_all_{}", t)).unwrap().as_secs_f32());
         }
     }
+
+    println!();
+
+    println!("n_threads,seq1,seq1_all,seq2,seq2_all,seq3,par1,par1_all,par2,par2_all,par3");
+    print!("1,{},", visits.get("seq1").unwrap());
+    print!("{},", visits.get("seq1_all").unwrap());
+    print!("{},", visits.get("seq2").unwrap());
+    print!("{},", visits.get("seq2_all").unwrap());
+    print!("{},", visits.get("seq3").unwrap());
+    print!("{},", visits.get("par1_1").unwrap());
+    print!("{},", visits.get("par1_all_1").unwrap());
+    print!("{},", visits.get("par2_1").unwrap());
+    print!("{},", visits.get("par2_all_1").unwrap());
+    println!("{}", visits.get("par3_1").unwrap());
+    for t in 2..=36 {
+        if t <= 6 {
+            print!("{},,,,,,{},", t, visits.get(&format!("par1_{}", t)).unwrap());
+            print!("{},", visits.get(&format!("par1_all_{}", t)).unwrap());
+            print!("{},", visits.get(&format!("par2_{}", t)).unwrap());
+            print!("{},", visits.get(&format!("par2_all_{}", t)).unwrap());
+            println!("{}", visits.get(&format!("par3_{}", t)).unwrap());
+        } else {
+            print!("{},,,,,,,,{},", t, visits.get(&format!("par2_{}", t)).unwrap());
+            println!("{},", visits.get(&format!("par2_all_{}", t)).unwrap());
+        }
+    }
+
+    // TODO Count the nodes visited and add them to the CSV data.
+    // TODO make sure to measure performance with the counter disabled, though.
 
     //player_v_player_default();
     //player_v_minimax_default(Player::One);
@@ -269,6 +232,60 @@ fn main() {
     println!("GNN WINS: {:?}", gnn_wins);
     println!("MINIMAX-12 WINS: {:?}", minimax_wins)
     */
+}
+
+fn run_experiment<T: MancalaZobrist>(
+    state: &T,
+    seq: &MinimaxBuilder<T>,
+    par: &ParMinimaxBuilder<T>,
+    all: bool,
+    max_t: usize,
+    times: &mut HashMap<String, std::time::Duration>,
+    visits: &mut HashMap<String, usize>,
+    id: usize,
+) {
+    // Run sequential experiments.
+    let key = match all {
+        false => format!("seq{}", id),
+        true => format!("seq{}_all", id),
+    };
+    let m = seq.build();
+    println!("Started {}...", key);
+    let start = std::time::Instant::now();
+    match all {
+        true => _ = m.search_utility_all(&state),
+        false => _ = m.search_utility(&state),
+    }
+    let end = std::time::Instant::now();
+    println!("{}: {}", key, m.nodes_visited());
+    times.insert(key.clone(), end - start);
+    visits.insert(key, m.nodes_visited());
+
+    // Run parallel experiments.
+    for t in 1..=max_t {
+        let key = match all {
+            false => format!("par{}_{}", id, t),
+            true => format!("par{}_all_{}", id, t),
+        };
+        let m = par.clone().max_threads(t).build();
+        println!("Started {}...", key);
+        let start = std::time::Instant::now();
+        match all {
+            true => _ = m.search_utility_all(&state),
+            false => _ = m.search_utility(&state),
+        }
+        let end = std::time::Instant::now();
+        times.insert(key.clone(), end - start);
+
+        println!("Started {} (visit counts)...", key);
+        let m = par.clone().max_threads(t).count_visits(true).build();
+        match all {
+            true => _ = m.search_utility_all(&state),
+            false => _ = m.search_utility(&state),
+        }
+        println!("{}: {}", key, m.nodes_visited());
+        visits.insert(key, m.nodes_visited());
+    }
 }
 
 // TODO: Maybe, we should have the datasets just return Tensors instead of individual example structs.

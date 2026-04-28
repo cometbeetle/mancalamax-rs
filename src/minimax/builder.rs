@@ -179,6 +179,7 @@ impl<T: MancalaZobrist> MinimaxBuilder<T> {
             start_time: None.into(),
             t_table: t_table.into(),
             z_data: Default::default(),
+            nodes_visited: 0.into(),
         }
     }
 }
@@ -194,6 +195,7 @@ pub struct ParMinimaxBuilder<T: MancalaZobrist> {
     move_orderer: MoveOrderFn<T>,
     evaluator: StateEvalFn<T>,
     heuristic: StateEvalFn<T>,
+    count_visits: bool,
     t_table_buckets: usize,
     shared_t_table: bool,
     max_threads: usize,
@@ -210,6 +212,7 @@ impl<T: MancalaZobrist> Default for ParMinimaxBuilder<T> {
     /// - `evaluator`: A function that returns the point differential between
     ///   the players (positive if the current player is winning).
     /// - `heuristic`: Same as evaluator.
+    /// - `count_visits`: [`false`]
     /// - `t_table_buckets`: `4096`
     /// - `shared_t_table`: [`true`]
     /// - `max_threads`: `1`
@@ -223,6 +226,7 @@ impl<T: MancalaZobrist> Default for ParMinimaxBuilder<T> {
             move_orderer: default_move_orderer,
             evaluator: default_evaluator,
             heuristic: default_evaluator,
+            count_visits: false,
             t_table_buckets: 4096,
             shared_t_table: true,
             max_threads: 1,
@@ -333,6 +337,15 @@ impl<T: MancalaZobrist> ParMinimaxBuilder<T> {
         self
     }
 
+    /// Set whether to count the number of nodes visited.
+    ///
+    /// If enabled, performance will slightly decrease due to extra
+    /// atomic increments.
+    pub fn count_visits(mut self, enabled: bool) -> Self {
+        self.count_visits = enabled;
+        self
+    }
+
     /// Set the initial number of shared transposition table buckets.
     /// Must be a positive power of two (e.g., `4096`).
     pub fn t_table_buckets(mut self, n: usize) -> Self {
@@ -381,6 +394,8 @@ impl<T: MancalaZobrist> ParMinimaxBuilder<T> {
             start_time: None.into(),
             t_table: TTable::new(t_table_buckets),
             z_data: Default::default(),
+            nodes_visited: 0.into(),
+            count_visits: self.count_visits,
             shared_t_table: self.shared_t_table,
             max_threads: self.max_threads,
             active_threads: 1usize.into(),
@@ -445,6 +460,7 @@ fn par_from_common<T: MancalaZobrist>(value: &ParMinimax<T>) -> ParMinimaxBuilde
         move_orderer: value.move_orderer,
         evaluator: value.evaluator,
         heuristic: value.heuristic,
+        count_visits: value.count_visits,
         t_table_buckets: value.t_table.n_buckets(),
         shared_t_table: value.shared_t_table,
         max_threads: value.max_threads,

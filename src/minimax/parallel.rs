@@ -28,6 +28,8 @@ pub struct ParMinimax<T: MancalaZobrist> {
     pub(super) start_time: RwLock<Option<Instant>>,
     pub(super) t_table: TTable,
     pub(super) z_data: RwLock<ZobristData>,
+    pub(super) nodes_visited: AtomicUsize,
+    pub(super) count_visits: bool,
     pub(super) shared_t_table: bool,
     pub(super) max_threads: usize,
     pub(super) active_threads: AtomicUsize,
@@ -90,6 +92,18 @@ impl<T: MancalaZobrist> ParMinimax<T> {
         &self.z_data
     }
 
+    /// Returns the number of nodes visited during the most recent search.
+    #[inline]
+    pub fn nodes_visited(&self) -> usize {
+        self.nodes_visited.load(Ordering::Relaxed)
+    }
+
+    /// Returns whether counting visited nodes is enabled.
+    #[inline]
+    pub fn count_visits(&self) -> bool {
+        self.count_visits
+    }
+
     /// Returns the number of shared transposition table buckets.
     #[inline]
     pub fn t_table_buckets(&self) -> usize {
@@ -133,6 +147,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
     /// If no move was found successfully, returns [`None`].
     pub fn search_utility(&self, state: &T) -> Option<SearchResult> {
         *self.start_time.write().unwrap() = Some(Instant::now());
+        self.nodes_visited.store(0, Ordering::Relaxed);
         self.active_threads.store(1, Ordering::Relaxed);
         let mut found_move: Option<Move> = None;
         let mut utility = f32::NEG_INFINITY;
@@ -221,6 +236,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
     /// If no moves could be successfully evaluated, returns [`None`].
     pub fn search_utility_all(&self, state: &T) -> Option<MultiSearchResult> {
         *self.start_time.write().unwrap() = Some(Instant::now());
+        self.nodes_visited.store(0, Ordering::Relaxed);
         self.active_threads.store(1, Ordering::Relaxed);
         let mut result: Option<MultiSearchResult> = None;
 
@@ -677,6 +693,11 @@ impl<T: MancalaZobrist> ParMinimax<T> {
         limit: Option<usize>,
         assigned_table: Option<&FxHashMap<u64, TTEntry>>,
     ) -> (Option<InternalResult>, f32, f32, usize) {
+        // Record that we visited a node.
+        if self.count_visits {
+            self.nodes_visited.fetch_add(1, Ordering::Relaxed);
+        }
+
         // Keep track of the original values for alpha, beta, and the remaining depth.
         let alpha_orig = *alpha;
         let beta_orig = *beta;
