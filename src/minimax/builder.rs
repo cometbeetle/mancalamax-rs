@@ -375,8 +375,7 @@ impl<T: MancalaZobrist> ParMinimaxBuilder<T> {
     /// Construct a [`ParMinimax`] instance based on the set configuration.
     pub fn build(&self) -> ParMinimax<T> {
         // Initially size the transposition table.
-        let t_table_buckets = if self.use_t_table && self.shared_t_table && self.t_table_buckets > 0
-        {
+        let t_table_buckets = if self.use_t_table && self.shared_t_table {
             self.t_table_buckets
         } else {
             1

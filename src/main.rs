@@ -21,7 +21,7 @@ fn main() {
     //       - - GS<36> & 12stones, depth 7 or 8, ID, TT enabled, shared TT, search regular
 
     // TODO: Cases where we do NOT see speedup:
-    //       - default game state, depth 20, ID, TT enabled, shared TT, search regular
+    //       - default game state, depth 20, no ID, TT enabled, shared TT, search regular
 
     // TODO: Mention that without a shared TT, the tables are removed after each ID iteration.
     //       This means ID is not really useful if the T table is not shared.
@@ -36,6 +36,9 @@ fn main() {
     // TODO: Mention that we didn't do the distributed T table because move ordering depends
     //       on access to table, so essentially too much overhead. More effective to do
     //       root-level splitting. Tested different depths, but all more overhead than worth it.
+    
+    // TODO: Mention that state1_bad_overhead speedup is bad even though overhead is minimal,
+    //       must be the case that there is too much contention on the T Table.
 
     // TODO: Note that the optimizations to minimax (alpha/beta, ID, TT) are so effective
     //       yet so sequential that with a small effective branching factor, it is nearly
@@ -54,7 +57,7 @@ fn main() {
     // TODO: Make terminal functions able to take ParMinimaxBuilder objects.
     // TODO: Probably need a Minimax trait...
 
-    const RUN: bool = false;
+    const RUN: bool = true;
     const FILES: [&str; 2] = ["times.json", "counts.json"];
 
     if RUN {
@@ -77,12 +80,12 @@ fn main() {
             .use_t_table(true)
             .shared_t_table(true);
         let seq3 = MinimaxBuilder::new()
-            .max_depth(Some(20))
-            .iterative_deepening(true)
+            .max_depth(Some(18))
+            .iterative_deepening(false)
             .use_t_table(true);
         let par3 = ParMinimaxBuilder::new()
-            .max_depth(Some(20))
-            .iterative_deepening(true)
+            .max_depth(Some(18))
+            .iterative_deepening(false)
             .use_t_table(true)
             .shared_t_table(true);
 
@@ -104,7 +107,7 @@ fn main() {
         // Expanded state (all move search).
         run_experiment(&state2, &seq2, &par2, true, 36, &mut times, &mut visits, 2);
 
-        // Default state, with ID + shared TT (single move search).
+        // Default state, with shared TT (single move search).
         run_experiment(&state1, &seq3, &par3, false, 6, &mut times, &mut visits, 3);
 
         // Save results using Serde.
@@ -173,9 +176,6 @@ fn main() {
             println!("{},", visits.get(&format!("par2_all_{}", t)).unwrap());
         }
     }
-
-    // TODO Count the nodes visited and add them to the CSV data.
-    // TODO make sure to measure performance with the counter disabled, though.
 
     //player_v_player_default();
     //player_v_minimax_default(Player::One);
