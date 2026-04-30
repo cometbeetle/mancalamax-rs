@@ -466,7 +466,7 @@ impl<T: MancalaZobrist> Minimax<T> {
         limit: Option<usize>,
     ) -> (Option<InternalResult>, f32, f32, usize) {
         // Record that we visited a node.
-        self.nodes_visited.update(|n| n + 1);
+        self.nodes_visited.replace(self.nodes_visited.get() + 1);
 
         // Keep track of the original values for alpha, beta, and the remaining depth.
         let alpha_orig = *alpha;
