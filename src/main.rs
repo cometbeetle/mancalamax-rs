@@ -17,6 +17,11 @@ fn main() {
     // TODO: Make terminal functions able to take ParMinimaxBuilder objects.
     // TODO: Probably need a Minimax trait...
 
+    // TODO: Without shared TT, the tables are removed after each ID iteration.
+    //       This means ID is not really useful if the T table is not shared.
+    //       Could be improved to combine the T Tables at the end, and re-distribute
+    //       to states after each ID iteration.
+
     //player_v_player_default();
     player_v_minimax_default(Player::One);
 
