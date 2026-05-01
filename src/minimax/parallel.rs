@@ -160,6 +160,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
             *z_data = ZobristData::for_states_like(state, 0x49CB86856BB06133);
         }
 
+        // Use a thread scope to avoid needing static lifetimes everywhere.
         thread::scope(|s| {
             if self.iterative_deepening {
                 for limit in 1usize.. {
@@ -246,6 +247,7 @@ impl<T: MancalaZobrist> ParMinimax<T> {
             *z_data = ZobristData::for_states_like(state, 0x49CB86856BB06133);
         }
 
+        // Use a thread scope to avoid needing static lifetimes everywhere.
         thread::scope(|s| {
             if self.iterative_deepening {
                 for limit in 1usize.. {
