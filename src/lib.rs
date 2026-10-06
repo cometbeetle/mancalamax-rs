@@ -9,6 +9,8 @@ pub mod minimax;
 pub mod ml;
 pub mod ui;
 
+pub mod net;
+
 #[cfg(test)]
 mod tests {
     use super::*;
